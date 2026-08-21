@@ -2,6 +2,7 @@ package com.onemind.app.data.local
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.ContentBlockEntity
 import com.onemind.app.data.local.entity.MemoryEntity
@@ -11,6 +12,7 @@ import com.onemind.app.data.local.entity.MemoryEntity
     version = 1,
     exportSchema = true
 )
+@TypeConverters(Converters::class)
 abstract class OneMindDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
 }
