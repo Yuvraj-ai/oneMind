@@ -1,10 +1,6 @@
 package com.onemind.app.ui.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -15,6 +11,7 @@ import com.onemind.app.ui.composer.ComposerScreen
 import com.onemind.app.ui.feed.FeedScreen
 import com.onemind.app.ui.feed.MemoryDetailScreen
 import com.onemind.app.ui.onboarding.OnboardingScreen
+import com.onemind.app.ui.settings.SettingsScreen
 
 /**
  * Main navigation graph for oneMind.
@@ -88,17 +85,9 @@ fun OneMindNavHost(
         }
 
         composable(NavRoutes.SETTINGS) {
-            PlaceholderScreen("Settings")
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
-    }
-}
-
-@Composable
-private fun PlaceholderScreen(name: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = name)
     }
 }
