@@ -14,11 +14,11 @@ import androidx.navigation.navArgument
 import com.onemind.app.ui.composer.ComposerScreen
 import com.onemind.app.ui.feed.FeedScreen
 import com.onemind.app.ui.feed.MemoryDetailScreen
+import com.onemind.app.ui.onboarding.OnboardingScreen
 
 /**
  * Main navigation graph for oneMind.
- * Feed, Detail, and Composer are real screens.
- * Settings and Onboarding remain placeholders.
+ * Start destination is determined by whether onboarding is complete.
  */
 @Composable
 fun OneMindNavHost(
@@ -31,6 +31,16 @@ fun OneMindNavHost(
         startDestination = startDestination,
         modifier = modifier
     ) {
+        composable(NavRoutes.ONBOARDING) {
+            OnboardingScreen(
+                onOnboardingComplete = {
+                    navController.navigate(NavRoutes.FEED) {
+                        popUpTo(NavRoutes.ONBOARDING) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(NavRoutes.FEED) {
             FeedScreen(
                 onNavigateToComposer = {
@@ -79,10 +89,6 @@ fun OneMindNavHost(
 
         composable(NavRoutes.SETTINGS) {
             PlaceholderScreen("Settings")
-        }
-
-        composable(NavRoutes.ONBOARDING) {
-            PlaceholderScreen("Onboarding")
         }
     }
 }

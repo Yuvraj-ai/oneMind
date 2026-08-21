@@ -87,6 +87,9 @@ dependencies {
     // Image Loading
     implementation(libs.coil.compose)
 
+    // DataStore
+    implementation(libs.androidx.datastore.preferences)
+
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
