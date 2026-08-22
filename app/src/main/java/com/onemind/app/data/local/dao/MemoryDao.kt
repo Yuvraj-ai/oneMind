@@ -54,4 +54,52 @@ interface MemoryDao {
         deleteContentBlocks(memory.id)
         insertContentBlocks(blocks)
     }
+
+    // --- source filtering (#21) -------------------------------------------
+
+    /**
+     * Count of Memories per source, for building filter chips with totals.
+     *
+     * Groups by sourceType and sourcePackage together because "Chrome (12)" and
+     * "WhatsApp (8)" are more useful than "SHARE (20)" when the user has shared
+     * from multiple apps.
+     */
+    @Query(
+        """
+        SELECT sourceType, sourcePackage, COUNT(*) as count
+        FROM memories
+        GROUP BY sourceType, sourcePackage
+        ORDER BY count DESC
+        """
+    )
+    suspend fun getSourceCounts(): List<SourceCount>
+
+    /**
+     * Memories from a specific sourceType.
+     */
+    @Transaction
+    @Query("SELECT * FROM memories WHERE sourceType = :sourceType ORDER BY createdAt DESC")
+    fun observeMemoriesBySourceType(sourceType: String): Flow<List<MemoryWithBlocks>>
+
+    /**
+     * Memories from a specific sourceType AND sourcePackage.
+     */
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM memories
+        WHERE sourceType = :sourceType AND sourcePackage = :sourcePackage
+        ORDER BY createdAt DESC
+        """
+    )
+    fun observeMemoriesBySource(sourceType: String, sourcePackage: String): Flow<List<MemoryWithBlocks>>
 }
+
+/**
+ * A source group with its count, for the filter chips.
+ */
+data class SourceCount(
+    val sourceType: String,
+    val sourcePackage: String?,
+    val count: Int
+)

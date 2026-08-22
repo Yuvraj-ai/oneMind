@@ -1,14 +1,18 @@
 package com.onemind.app.ui.feed
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.data.storage.ImageFileStorage
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
+import com.onemind.app.domain.model.SourceType
 import com.onemind.app.domain.repository.MemoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,8 +23,10 @@ import javax.inject.Inject
 @HiltViewModel
 class FeedViewModel @Inject constructor(
     private val memoryRepository: MemoryRepository,
+    private val memoryDao: MemoryDao,
     private val imageFileStorage: ImageFileStorage,
-    private val processingScheduler: ProcessingScheduler
+    private val processingScheduler: ProcessingScheduler,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
@@ -28,6 +34,7 @@ class FeedViewModel @Inject constructor(
 
     init {
         observeMemories()
+        loadSourceCounts()
     }
 
     private fun observeMemories() {
@@ -37,6 +44,51 @@ class FeedViewModel @Inject constructor(
                     it.copy(memories = memories, isLoading = false)
                 }
             }
+        }
+    }
+
+    private fun loadSourceCounts() {
+        viewModelScope.launch {
+            val counts = memoryDao.getSourceCounts()
+            val options = counts.mapNotNull { row ->
+                val sourceType = try {
+                    SourceType.valueOf(row.sourceType)
+                } catch (e: IllegalArgumentException) { null }
+                    ?: return@mapNotNull null
+
+                val label = resolveSourceLabel(sourceType, row.sourcePackage)
+                SourceFilterOption(
+                    sourceType = sourceType,
+                    sourcePackage = row.sourcePackage,
+                    label = label,
+                    count = row.count
+                )
+            }
+            _uiState.update { it.copy(availableSources = options) }
+        }
+    }
+
+    fun setSourceFilter(filter: SourceFilter?) {
+        _uiState.update { it.copy(sourceFilter = filter) }
+    }
+
+    fun setViewMode(mode: ViewMode) {
+        _uiState.update { it.copy(viewMode = mode) }
+    }
+
+    private fun resolveSourceLabel(sourceType: SourceType, sourcePackage: String?): String {
+        if (sourcePackage != null) {
+            try {
+                val pm = appContext.packageManager
+                val appInfo = pm.getApplicationInfo(sourcePackage, 0)
+                return pm.getApplicationLabel(appInfo).toString()
+            } catch (_: Exception) { }
+        }
+        return when (sourceType) {
+            SourceType.SCREENSHOT -> "Screenshots"
+            SourceType.CLIPBOARD -> "Clipboard"
+            SourceType.SHARE -> "Shared"
+            SourceType.MANUAL -> "Manual"
         }
     }
 

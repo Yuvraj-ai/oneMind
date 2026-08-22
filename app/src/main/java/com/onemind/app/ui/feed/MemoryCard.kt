@@ -103,6 +103,9 @@ fun MemoryCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                // Source app / capture method
+                SourceRow(memory = memory)
+
                 ProcessingStatusRow(
                     state = memory.processingState,
                     onRetry = onRetryProcessing

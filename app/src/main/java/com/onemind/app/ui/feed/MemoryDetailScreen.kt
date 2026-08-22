@@ -128,6 +128,9 @@ private fun MemoryDetailContent(
 
         CategoryChips(categories = memory.derived.categories)
 
+        // Source
+        SourceRow(memory = memory)
+
         // Content blocks
         memory.contentBlocks.sortedBy { it.position }.forEach { block ->
             ContentBlockView(block = block)
