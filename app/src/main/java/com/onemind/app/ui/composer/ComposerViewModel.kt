@@ -98,11 +98,27 @@ class ComposerViewModel @Inject constructor(
 
     /**
      * Remove an attached image by index.
+     *
+     * Deletes the files too. Dropping only the path left the canonical image and its
+     * thumbnail on disk with nothing referencing them — invisible to the user and
+     * uncounted by the storage figure in Settings, so their only symptom was the app
+     * growing for no reason.
      */
     fun onImageRemoved(index: Int) {
+        val removed = _uiState.value.imagePaths.getOrNull(index)
+
         _uiState.update {
             it.copy(imagePaths = it.imagePaths.toMutableList().apply { removeAt(index) })
         }
+
+        // Only a canonical path has files on disk to remove. An attachment still
+        // holding just its source URI was never written, so there is nothing to
+        // delete — and passing the URI to deleteImage would attempt to delete a file
+        // outside our storage.
+        removed?.canonicalPath?.let { path ->
+            viewModelScope.launch { imageFileStorage.deleteImage(path) }
+        }
+
         scheduleAutoSave()
     }
 

@@ -3,6 +3,7 @@ package com.onemind.app.data.repository
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
+import com.onemind.app.data.local.dao.SearchIndexDao
 import com.onemind.app.data.local.entity.CategoryMapper
 import com.onemind.app.data.local.entity.DerivedMapper
 import com.onemind.app.data.local.entity.EntityMapper.toDomain
@@ -23,7 +24,8 @@ import javax.inject.Singleton
 class MemoryRepositoryImpl @Inject constructor(
     private val memoryDao: MemoryDao,
     private val derivedDataDao: DerivedDataDao,
-    private val categoryDao: CategoryDao
+    private val categoryDao: CategoryDao,
+    private val searchIndexDao: SearchIndexDao
 ) : MemoryRepository {
 
     /**
@@ -32,16 +34,22 @@ class MemoryRepositoryImpl @Inject constructor(
      * for every row would be paid on every scroll for data nothing on screen
      * reads.
      *
-     * Both extras are fetched in one batched query each, rather than per row,
-     * because a query per card is a cost the feed pays on every scroll.
+     * Both extras are fetched in batched queries rather than per row, because a
+     * query per card is a cost the feed pays on every scroll. Batches are chunked:
+     * SQLite's `IN` is expanded to one bind parameter per id, and the limit on API
+     * 30 is 999. A user with a thousand Memories would otherwise hit
+     * "too many SQL variables" and see an empty feed.
      */
     override fun observeAllMemories(): Flow<List<Memory>> {
         return memoryDao.observeAllMemories().map { rows ->
             if (rows.isEmpty()) return@map emptyList()
 
             val ids = rows.map { it.memory.id }
-            val summaries = derivedDataDao.getSummaries(ids).associateBy { it.memoryId }
-            val categories = categoryDao.getCategoriesForMemories(ids)
+            val summaries = ids.chunked(SQL_VARIABLE_LIMIT)
+                .flatMap { derivedDataDao.getSummaries(it) }
+                .associateBy { it.memoryId }
+            val categories = ids.chunked(SQL_VARIABLE_LIMIT)
+                .flatMap { categoryDao.getCategoriesForMemories(it) }
                 .groupBy { it.memoryId }
                 .mapValues { (_, catRows) ->
                     catRows.map { Category(id = it.id, name = it.name, parentId = it.parentId) }
@@ -79,15 +87,18 @@ class MemoryRepositoryImpl @Inject constructor(
     override suspend fun getMemoriesByIds(ids: List<Long>): List<Memory> {
         if (ids.isEmpty()) return emptyList()
 
-        val rows = memoryDao.getMemoriesByIds(ids)
+        val rows = ids.chunked(SQL_VARIABLE_LIMIT).flatMap { memoryDao.getMemoriesByIds(it) }
         if (rows.isEmpty()) return emptyList()
 
         // Same two batched lookups the feed uses, for the same reason: results are
         // rendered with the feed's card, and a query per row would cost on every
         // keystroke rather than every scroll.
         val presentIds = rows.map { it.memory.id }
-        val summaries = derivedDataDao.getSummaries(presentIds).associateBy { it.memoryId }
-        val categories = categoryDao.getCategoriesForMemories(presentIds)
+        val summaries = presentIds.chunked(SQL_VARIABLE_LIMIT)
+            .flatMap { derivedDataDao.getSummaries(it) }
+            .associateBy { it.memoryId }
+        val categories = presentIds.chunked(SQL_VARIABLE_LIMIT)
+            .flatMap { categoryDao.getCategoriesForMemories(it) }
             .groupBy { it.memoryId }
             .mapValues { (_, catRows) ->
                 catRows.map { Category(id = it.id, name = it.name, parentId = it.parentId) }
@@ -129,7 +140,12 @@ class MemoryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteMemory(id: Long) {
-        // Derived rows cascade from the memories foreign key, so they go too.
+        // The relational child tables cascade from the memories foreign key. The
+        // search index does not, and cannot: memory_search_index is an FTS4 virtual
+        // table, and SQLite does not support foreign keys on virtual tables. Left
+        // alone, the deleted Memory's text stays matchable — a privacy problem, and
+        // one that also crowds genuine matches out of the query's LIMIT.
+        searchIndexDao.delete(id)
         memoryDao.deleteMemory(id)
     }
 
@@ -165,5 +181,18 @@ class MemoryRepositoryImpl @Inject constructor(
                 categoryDao.getCategorization(memoryId)?.toDomain()
             }
         )
+    }
+
+    companion object {
+        /**
+         * Ids per `IN` clause.
+         *
+         * Room expands `IN (:ids)` to one bind parameter per element, and SQLite
+         * caps those at 999 — a limit that has been raised in later versions but not
+         * in the one shipping on API 30, which is this app's floor. Chunking below it
+         * keeps the feed working past a thousand Memories, which is the scale the app
+         * is explicitly built for.
+         */
+        internal const val SQL_VARIABLE_LIMIT = 900
     }
 }

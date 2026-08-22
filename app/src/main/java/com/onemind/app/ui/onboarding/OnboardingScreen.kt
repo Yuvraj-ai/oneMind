@@ -40,7 +40,12 @@ fun OnboardingScreen(
                 onSkip = { viewModel.onSkipProvider() }
             )
             OnboardingStep.DOWNLOADING -> DownloadScreen(
-                modelName = uiState.selectedModel?.displayName ?: "",
+                // Falls back to the embedding model's name rather than an empty
+                // string. With local generative inference deferred (ADR-0002),
+                // selectedModel is always null, so every user saw "Downloading "
+                // with a blank name.
+                modelName = uiState.selectedModel?.displayName
+                    ?: uiState.embeddingModelName,
                 progressPercent = uiState.downloadProgress,
                 downloadedMb = uiState.downloadedMb,
                 totalMb = uiState.totalMb,

@@ -42,80 +42,77 @@ class TemporalExpressionParser @Inject constructor() {
         now: Instant = Instant.now()
     ): TemporalExpression? {
         val today = now.atZone(zone).toLocalDate()
-        val lower = query.lowercase()
 
-        // Ordered longest-first within each family, so "last week" is not consumed
-        // by a rule for "week", and "the day before yesterday" beats "yesterday".
-        return parseNumberedDaysAgo(lower, query, today, zone)
-            ?: parseNumberedWeeksAgo(lower, query, today, zone)
-            ?: parseNumberedMonthsAgo(lower, query, today, zone)
-            ?: parseNamedRelative(lower, query, today, zone)
-            ?: parseMonthName(lower, query, today, zone)
+        // Matching is done case-insensitively against the ORIGINAL string rather
+        // than against a lowercased copy. Lowercasing is not length-preserving —
+        // U+0130 (dotted capital I) becomes two characters — so an offset found in
+        // the copy can point past the end of the original. That is a
+        // StringIndexOutOfBoundsException on a keystroke for anyone typing Turkish.
+        return parseNumberedDaysAgo(query, today, zone)
+            ?: parseNumberedWeeksAgo(query, today, zone)
+            ?: parseNumberedMonthsAgo(query, today, zone)
+            ?: parseNamedRelative(query, today, zone)
+            ?: parseMonthName(query, today, zone)
     }
 
     // --- "N days ago", including spelled-out numbers -----------------------
 
     private fun parseNumberedDaysAgo(
-        lower: String,
-        original: String,
+        query: String,
         today: LocalDate,
         zone: ZoneId
     ): TemporalExpression? {
-        val match = Regex("""\b(\d+|${NUMBER_WORDS.keys.joinToString("|")})\s+days?\s+ago\b""")
-            .find(lower) ?: return null
+        val match = countRegex("days?").find(query) ?: return null
         val count = numberOf(match.groupValues[1]) ?: return null
         val day = today.minusDays(count.toLong())
-        return dayRange(day, zone, original.substring(match.range))
+        return dayRange(day, zone, match.value)
     }
 
     private fun parseNumberedWeeksAgo(
-        lower: String,
-        original: String,
+        query: String,
         today: LocalDate,
         zone: ZoneId
     ): TemporalExpression? {
-        val match = Regex("""\b(\d+|${NUMBER_WORDS.keys.joinToString("|")})\s+weeks?\s+ago\b""")
-            .find(lower) ?: return null
+        val match = countRegex("weeks?").find(query) ?: return null
         val count = numberOf(match.groupValues[1]) ?: return null
         // The whole of that week, not the single day N*7 days back: someone saying
         // "two weeks ago" is pointing at a period, not a date.
         val target = today.minusWeeks(count.toLong())
         val weekStart = target.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        return range(weekStart, weekStart.plusWeeks(1), zone, original.substring(match.range))
+        return range(weekStart, weekStart.plusWeeks(1), zone, match.value)
     }
 
     private fun parseNumberedMonthsAgo(
-        lower: String,
-        original: String,
+        query: String,
         today: LocalDate,
         zone: ZoneId
     ): TemporalExpression? {
-        val match = Regex("""\b(\d+|${NUMBER_WORDS.keys.joinToString("|")})\s+months?\s+ago\b""")
-            .find(lower) ?: return null
+        val match = countRegex("months?").find(query) ?: return null
         val count = numberOf(match.groupValues[1]) ?: return null
         val target = today.minusMonths(count.toLong())
         val monthStart = target.withDayOfMonth(1)
-        return range(monthStart, monthStart.plusMonths(1), zone, original.substring(match.range))
+        return range(monthStart, monthStart.plusMonths(1), zone, match.value)
     }
+
+    private fun countRegex(unit: String) = Regex(
+        """\b(\d+|${NUMBER_WORDS.keys.joinToString("|")})\s+$unit\s+ago\b""",
+        RegexOption.IGNORE_CASE
+    )
 
     // --- named relative expressions ----------------------------------------
 
     private fun parseNamedRelative(
-        lower: String,
-        original: String,
+        query: String,
         today: LocalDate,
         zone: ZoneId
     ): TemporalExpression? {
         // Longest first: "the day before yesterday" contains "yesterday", and "last
         // week" would otherwise be found by a "week" rule.
         NAMED.forEach { (phrase, resolver) ->
-            val index = lower.indexOf(phrase)
-            if (index >= 0) {
+            val match = Regex(Regex.escape(phrase), RegexOption.IGNORE_CASE).find(query)
+            if (match != null) {
                 val (start, endExclusive) = resolver(today)
-                return range(
-                    start, endExclusive, zone,
-                    original.substring(index, index + phrase.length)
-                )
+                return range(start, endExclusive, zone, match.value)
             }
         }
         return null
@@ -123,15 +120,29 @@ class TemporalExpressionParser @Inject constructor() {
 
     // --- "in July" ----------------------------------------------------------
 
+    /**
+     * "in July", but never a bare "may".
+     *
+     * The preposition is **required**, and that is the whole point of the rule.
+     * Several month names are ordinary English words — "may" and "march" most
+     * obviously — so an optional preposition turns "the recipe I may have saved"
+     * into a filter for the whole of last May. Since [SearchOrchestrator] applies
+     * temporal constraints as hard filters, that discards nearly every Memory and
+     * reports "No memories found" with nothing to explain it.
+     *
+     * Requiring "in", "during", or "back in" costs the user one word and removes an
+     * entire class of silently wrong result.
+     */
     private fun parseMonthName(
-        lower: String,
-        original: String,
+        query: String,
         today: LocalDate,
         zone: ZoneId
     ): TemporalExpression? {
-        val match = Regex("""\b(?:in\s+)?(${MONTHS.keys.joinToString("|")})\b""")
-            .find(lower) ?: return null
-        val month = MONTHS[match.groupValues[1]] ?: return null
+        val match = Regex(
+            """\b(?:in|during|back\s+in)\s+(${MONTHS.keys.joinToString("|")})\b""",
+            RegexOption.IGNORE_CASE
+        ).find(query) ?: return null
+        val month = MONTHS[match.groupValues[1].lowercase()] ?: return null
 
         // The most recent occurrence of that month. In January, "in July" means last
         // July — reading it as this year's July would point at a future range and
@@ -140,12 +151,7 @@ class TemporalExpressionParser @Inject constructor() {
         if (month.value > today.monthValue) year -= 1
 
         val monthStart = LocalDate.of(year, month, 1)
-        return range(
-            monthStart,
-            monthStart.plusMonths(1),
-            zone,
-            original.substring(match.range)
-        )
+        return range(monthStart, monthStart.plusMonths(1), zone, match.value)
     }
 
     // --- range construction -------------------------------------------------

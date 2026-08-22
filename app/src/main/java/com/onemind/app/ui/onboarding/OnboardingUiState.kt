@@ -26,7 +26,16 @@ data class OnboardingUiState(
      * Whether any local generative model can be offered. False while local
      * inference is deferred (ADR-0002), which changes what the model step says.
      */
-    val localModelsAvailable: Boolean = false
+    val localModelsAvailable: Boolean = false,
+
+    /**
+     * Display name of the embedding model.
+     *
+     * Shown on the download screen, because that is the only download every route
+     * out of onboarding performs. Without it the header read "Downloading " with a
+     * blank name for every user.
+     */
+    val embeddingModelName: String = "the search model"
 )
 
 enum class OnboardingStep {

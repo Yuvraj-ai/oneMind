@@ -49,7 +49,8 @@ class OnboardingViewModel @Inject constructor(
                 // No local generative runtime exists yet (ADR-0002), so the only
                 // route to enrichment is a cloud provider. Onboarding says so
                 // rather than offering a download that cannot run.
-                localModelsAvailable = modelRegistry.hasLocalGenerativeModels
+                localModelsAvailable = modelRegistry.hasLocalGenerativeModels,
+                embeddingModelName = modelRegistry.embeddingModel.displayName
             )
         }
     }
@@ -177,9 +178,24 @@ class OnboardingViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Retry a failed download.
+     *
+     * Routes to whichever download actually failed. Previously this always called
+     * [onStartDownload], which returns immediately when no generative model is
+     * selected — and since local generative inference is deferred (ADR-0002) the
+     * registry offers none, so `selectedModel` is always null. Every reachable
+     * download is therefore the embedding-only one, and Retry silently did nothing,
+     * leaving the user on a frozen 0% screen whose only exit was Cancel.
+     */
     fun onRetryDownload() {
         _uiState.update { it.copy(downloadError = null) }
-        onStartDownload()
+
+        if (_uiState.value.selectedModel != null) {
+            onStartDownload()
+        } else {
+            downloadEmbeddingModelThenFinish()
+        }
     }
 
     fun onChooseCloud() {
@@ -275,23 +291,26 @@ class OnboardingViewModel @Inject constructor(
         _uiState.update { it.copy(cloudTestResult = CloudTestResult.TESTING) }
 
         viewModelScope.launch {
-            try {
-                val config = CloudConfig(
+            // Throwaway provider, same reasoning as SettingsViewModel: testing must
+            // not activate anything, so a failed test cannot leave the app in a worse
+            // state than before the user pressed the button.
+            val result = providerManager.testCloudConfig(
+                CloudConfig(
                     baseUrl = state.cloudBaseUrl.trimEnd('/'),
                     apiKey = state.cloudApiKey.trim(),
                     modelName = state.cloudModelName.trim(),
                     supportsVision = state.cloudSupportsVision
                 )
-                providerManager.activateCloud(config)
-                val result = providerManager.getProvider()?.generateText("Say hello in one word.")
-                if (result?.isSuccess == true) {
-                    _uiState.update { it.copy(cloudTestResult = CloudTestResult.SUCCESS) }
-                } else {
-                    providerManager.deactivate()
-                    _uiState.update { it.copy(cloudTestResult = CloudTestResult.FAILED) }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(cloudTestResult = CloudTestResult.FAILED) }
+            )
+
+            _uiState.update {
+                it.copy(
+                    cloudTestResult = if (result.isSuccess) {
+                        CloudTestResult.SUCCESS
+                    } else {
+                        CloudTestResult.FAILED
+                    }
+                )
             }
         }
     }

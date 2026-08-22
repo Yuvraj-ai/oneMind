@@ -2,6 +2,7 @@ package com.onemind.app.ui.feed
 
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.SourceType
+import com.onemind.app.domain.search.FtsQuery
 import com.onemind.app.domain.search.SearchResult
 
 /**
@@ -38,13 +39,15 @@ data class FeedUiState(
     val isSearching: Boolean = false
 ) {
     /**
-     * True once the user has typed something usable.
+     * True once the user has typed something the search can actually act on.
      *
-     * Drives which of two modes the screen is in: browsing their memories, or
-     * looking at search results. Derived rather than stored, so the two can never
-     * disagree.
+     * Keyed on whether a query could be *built*, not on whether text was typed.
+     * Those differ: `FtsQuery.build` returns null for a single character or a query
+     * made only of stopwords, so keying on raw text made typing "the" or "a" show a
+     * hard "No memories found" — telling the user their memories were missing when
+     * nothing had been searched for.
      */
-    val isSearchActive: Boolean get() = searchQuery.isNotBlank()
+    val isSearchActive: Boolean get() = FtsQuery.build(searchQuery) != null
 }
 
 /**

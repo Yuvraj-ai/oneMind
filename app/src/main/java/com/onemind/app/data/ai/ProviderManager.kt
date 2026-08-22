@@ -53,6 +53,31 @@ class ProviderManager @Inject constructor(
     }
 
     /**
+     * Check whether a config actually works, without touching the active provider.
+     *
+     * Deliberately builds a throwaway [CloudModelProvider] rather than activating the
+     * shared one. Testing used to activate it, which meant a mistyped API key
+     * *replaced* a working provider with a broken one, or on the failure branch left
+     * the app with none at all — while Settings still displayed the old provider as
+     * current. The UI lied about a state the user had just broken.
+     *
+     * Nothing here is persisted. Committing is [activateCloud]'s job, called when the
+     * user explicitly chooses the provider.
+     */
+    suspend fun testCloudConfig(config: CloudConfig): Result<String> {
+        val probe = CloudModelProvider()
+        probe.configure(config)
+        return try {
+            probe.load()
+            probe.generateText("Say hello in one word.")
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            probe.unload()
+        }
+    }
+
+    /**
      * Unload the current provider and clear state.
      */
     suspend fun deactivate() {

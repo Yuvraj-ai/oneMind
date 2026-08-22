@@ -144,23 +144,26 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(cloudTestResult = CloudTestResult.TESTING) }
 
         viewModelScope.launch {
-            try {
-                val config = CloudConfig(
-                    baseUrl = state.cloudBaseUrl.trimEnd('/'),
-                    apiKey = state.cloudApiKey.trim(),
-                    modelName = state.cloudModelName.trim(),
-                    supportsVision = state.cloudSupportsVision
+            val config = CloudConfig(
+                baseUrl = state.cloudBaseUrl.trimEnd('/'),
+                apiKey = state.cloudApiKey.trim(),
+                modelName = state.cloudModelName.trim(),
+                supportsVision = state.cloudSupportsVision
+            )
+
+            // Tested against a throwaway provider. Activating the shared one here
+            // meant a mistyped key replaced a working provider with a broken one, or
+            // left none at all, while this screen still showed the old one as current.
+            val result = providerManager.testCloudConfig(config)
+
+            _uiState.update {
+                it.copy(
+                    cloudTestResult = if (result.isSuccess) {
+                        CloudTestResult.SUCCESS
+                    } else {
+                        CloudTestResult.FAILED
+                    }
                 )
-                providerManager.activateCloud(config)
-                val result = providerManager.getProvider()?.generateText("Say hello in one word.")
-                if (result?.isSuccess == true) {
-                    _uiState.update { it.copy(cloudTestResult = CloudTestResult.SUCCESS) }
-                } else {
-                    providerManager.deactivate()
-                    _uiState.update { it.copy(cloudTestResult = CloudTestResult.FAILED) }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(cloudTestResult = CloudTestResult.FAILED) }
             }
         }
     }
@@ -168,12 +171,23 @@ class SettingsViewModel @Inject constructor(
     fun onConfirmCloudConfig() {
         val state = _uiState.value
         viewModelScope.launch {
-            onboardingPreferences.setActiveCloudProvider(
+            val config = CloudConfig(
                 baseUrl = state.cloudBaseUrl.trimEnd('/'),
                 apiKey = state.cloudApiKey.trim(),
                 modelName = state.cloudModelName.trim(),
                 supportsVision = state.cloudSupportsVision
             )
+
+            // Persist *and* activate. Previously this only persisted, so the provider
+            // was live only as a side effect of having pressed Test — meaning a user
+            // who skipped Test saved a config that did nothing until the next launch.
+            onboardingPreferences.setActiveCloudProvider(
+                baseUrl = config.baseUrl,
+                apiKey = config.apiKey,
+                modelName = config.modelName,
+                supportsVision = config.supportsVision
+            )
+            providerManager.activateCloud(config)
             loadCurrentState()
         }
     }

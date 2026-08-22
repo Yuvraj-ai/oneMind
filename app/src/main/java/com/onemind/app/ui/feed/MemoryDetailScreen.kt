@@ -1,5 +1,6 @@
 package com.onemind.app.ui.feed
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
@@ -15,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -167,11 +171,18 @@ private fun ExtractedMetadataSection(memory: Memory) {
 
     if (urls.isNotEmpty()) {
         MetadataLabel("Links")
+        val context = LocalContext.current
         urls.forEach { url ->
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Links were rendered as inert text, which made the whole
+                    // URL-extraction stage terminate in something the user could look
+                    // at and not use.
+                    .clickable { openUrl(context, url.rawUrl) }
+                    .semantics { role = Role.Button }
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
@@ -403,5 +414,26 @@ private fun ContentBlockView(block: ContentBlock) {
                 )
             }
         }
+    }
+}
+
+
+/**
+ * Open a link in whatever the user has set as their browser.
+ *
+ * Silently does nothing when no app can handle it. That case is rare — a device with
+ * no browser — and a crash or an error dialog would both be worse than a tap that
+ * does not respond, since the URL is still visible and selectable on screen.
+ */
+private fun openUrl(context: android.content.Context, url: String) {
+    try {
+        context.startActivity(
+            android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse(url)
+            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    } catch (e: android.content.ActivityNotFoundException) {
+        // No handler installed. Nothing useful to do or say.
     }
 }

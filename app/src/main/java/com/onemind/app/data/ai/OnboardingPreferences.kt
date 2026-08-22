@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -67,17 +68,26 @@ class OnboardingPreferences @Inject constructor(
         }
     }
 
+    /**
+     * The stored cloud configuration, or null if none was saved.
+     *
+     * Uses `first()`, not `collect`. `DataStore.data` is an infinite flow — it emits
+     * on every subsequent write and never completes — so collecting it here suspended
+     * forever and the function never returned. It had no callers, which is the only
+     * reason that had not been noticed.
+     */
     suspend fun getCloudConfig(): CloudConfig? {
-        var config: CloudConfig? = null
-        context.dataStore.data.collect { prefs ->
-            val baseUrl = prefs[KEY_CLOUD_BASE_URL]
-            val apiKey = prefs[KEY_CLOUD_API_KEY]
-            val modelName = prefs[KEY_CLOUD_MODEL_NAME]
-            val supportsVision = prefs[KEY_CLOUD_SUPPORTS_VISION] ?: false
-            if (baseUrl != null && apiKey != null && modelName != null) {
-                config = CloudConfig(baseUrl, apiKey, modelName, supportsVision)
-            }
-        }
-        return config
+        val prefs = context.dataStore.data.first()
+        val baseUrl = prefs[KEY_CLOUD_BASE_URL]
+        val apiKey = prefs[KEY_CLOUD_API_KEY]
+        val modelName = prefs[KEY_CLOUD_MODEL_NAME]
+        val supportsVision = prefs[KEY_CLOUD_SUPPORTS_VISION] ?: false
+
+        if (baseUrl == null || apiKey == null || modelName == null) return null
+        return CloudConfig(baseUrl, apiKey, modelName, supportsVision)
     }
+
+    /** Which provider the user last activated, or null if they never did. */
+    suspend fun getActiveProviderType(): String? =
+        context.dataStore.data.first()[KEY_ACTIVE_PROVIDER_TYPE]
 }

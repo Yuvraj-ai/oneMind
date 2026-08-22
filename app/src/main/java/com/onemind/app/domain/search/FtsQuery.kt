@@ -32,11 +32,15 @@ object FtsQuery {
     /**
      * Characters kept inside a term.
      *
-     * Letters and digits are obvious. Dots survive because domains are indexed
-     * ("github.com" should be searchable as one term). Everything else goes,
-     * including the FTS operators, so no input can reach SQLite as syntax.
+     * Letters and digits only. Dots are **separators**, not term characters, which
+     * matters more than it looks: the FTS4 table uses SQLite's `simple` tokeniser,
+     * which splits on every non-alphanumeric character. It stores "node.js" as two
+     * tokens, `node` and `js`. If this kept the dot, a query for `js` would be
+     * matched by FTS and then scored zero by [KeywordScoring] against the term
+     * `node.js`, and the row would be dropped — found by the index, discarded by our
+     * own arithmetic. The two tokenisers have to agree.
      */
-    private val ALLOWED = Regex("""[^\p{L}\p{N}.]+""")
+    private val ALLOWED = Regex("""[^\p{L}\p{N}]+""")
 
     /** Below this, a term matches so much that it is noise rather than a filter. */
     private const val MIN_TERM_LENGTH = 2
@@ -92,7 +96,6 @@ object FtsQuery {
     fun tokenize(raw: String): List<String> =
         raw.lowercase()
             .split(ALLOWED)
-            .map { it.trim('.') }
             .filter { it.length >= MIN_TERM_LENGTH }
 
     /**

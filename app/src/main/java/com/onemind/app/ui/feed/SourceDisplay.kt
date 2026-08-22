@@ -38,9 +38,17 @@ fun SourceRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         sourceInfo.icon?.let { icon ->
+            // Rasterised once per source, not per recomposition. Without the
+            // remember this ran toBitmap() on the main thread for every visible card
+            // on every frame, which is a measurable cause of scroll jank.
+            val bitmap = remember(sourceInfo.label) {
+                icon.toBitmap(width = ICON_PX, height = ICON_PX).asImageBitmap()
+            }
             Image(
-                bitmap = icon.toBitmap(width = 14, height = 14).asImageBitmap(),
-                contentDescription = "Source app icon",
+                bitmap = bitmap,
+                // Null rather than a description: the label beside it already names
+                // the app, so announcing the icon too would just repeat it.
+                contentDescription = null,
                 modifier = Modifier.size(14.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -52,6 +60,9 @@ fun SourceRow(
         )
     }
 }
+
+/** Icon raster size in pixels. Small: it renders at 14dp. */
+private const val ICON_PX = 48
 
 /**
  * Resolved source information for display.

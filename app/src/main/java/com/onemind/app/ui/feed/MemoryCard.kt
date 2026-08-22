@@ -44,7 +44,12 @@ fun MemoryCard(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = onLongClick
+                onLongClick = onLongClick,
+                // Long-press was the only route to delete and carried no label, so a
+                // screen-reader user had no way to discover or reach it. TalkBack
+                // surfaces this as an explicit action.
+                onLongClickLabel = "Delete memory",
+                onClickLabel = "Open memory"
             ),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)

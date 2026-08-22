@@ -2,6 +2,7 @@ package com.onemind.app
 
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
+import com.onemind.app.data.local.dao.SearchIndexDao
 import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.ContentBlockEntity
 import com.onemind.app.data.local.entity.MemoryEntity
@@ -23,6 +24,7 @@ class MemoryRepositoryTest {
     private lateinit var memoryDao: MemoryDao
     private lateinit var derivedDataDao: DerivedDataDao
     private lateinit var categoryDao: CategoryDao
+    private lateinit var searchIndexDao: SearchIndexDao
     private lateinit var repository: MemoryRepositoryImpl
 
     @Before
@@ -30,7 +32,21 @@ class MemoryRepositoryTest {
         memoryDao = mockk(relaxed = true)
         derivedDataDao = mockk(relaxed = true)
         categoryDao = mockk(relaxed = true)
-        repository = MemoryRepositoryImpl(memoryDao, derivedDataDao, categoryDao)
+        searchIndexDao = mockk(relaxed = true)
+        repository = MemoryRepositoryImpl(
+            memoryDao, derivedDataDao, categoryDao, searchIndexDao
+        )
+    }
+
+    @Test
+    fun `deleting a memory also removes its search index row`() = runTest {
+        // memory_search_index is an FTS4 virtual table, and SQLite supports no
+        // foreign keys on virtual tables — so unlike every other child table, it does
+        // not cascade. Left behind, the deleted text stays matchable.
+        repository.deleteMemory(7L)
+
+        coVerify { searchIndexDao.delete(7L) }
+        coVerify { memoryDao.deleteMemory(7L) }
     }
 
     @Test

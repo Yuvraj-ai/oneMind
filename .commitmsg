@@ -1,0 +1,110 @@
+Fix pre-release review findings: data loss, stuck state, wrong results
+
+A three-way review sweep of the data, UI and search layers found 31 real
+problems. This fixes the crash, data-loss and wrong-behaviour ones. Each was
+reproduced before being fixed — ReviewFindingsTest holds the reproductions for
+the three that are pure logic, and 8 of its 10 assertions failed before these
+changes.
+
+DATA LOSS
+
+The composer had no BackHandler, so the system back gesture bypassed
+onLeaveComposer entirely. Text typed inside the 3s autosave window was lost
+outright, and an autosaved Memory stayed in DRAFT — never enqueued, never
+enriched, never searchable. Back is how most people leave a screen, so this was
+the likeliest way to lose content in the whole app.
+
+Removing an attached image dropped the path but left the canonical image and its
+thumbnail on disk with nothing referencing them.
+
+STUCK STATE
+
+A Memory could be stranded in PROCESSING permanently. The state was written
+before the first stage and was not an eligible entry state, so a worker killed
+mid-run — process death, or WorkManager stopping it on low battery — left the
+Memory claimed by a run that no longer existed. The retry saw PROCESSING,
+returned NotEligible, and the worker reported that as success. markFailed was
+unreachable, retryProcessing refuses anything but FAILED, and nothing swept
+stale rows. The card span forever with no way back short of clearing app data.
+
+Fixed three ways: PROCESSING is now an eligible entry state with a
+self-transition so an interrupted run resumes; StaleProcessingSweeper releases
+Memories older than 15 minutes at startup so the user gets the retry
+affordance; and CancellationException is rethrown rather than swallowed in both
+the pipeline and the worker, with the terminal markFailed write made
+NonCancellable so it cannot be lost during teardown.
+
+EVERY AI FEATURE SILENTLY DID NOTHING IN THE BACKGROUND
+
+ProviderManager held the active provider in memory only, and nothing but the
+onboarding and settings screens ever set it. Enrichment runs in a WorkManager
+worker that Android usually starts in a fresh process, where no screen has run —
+so summarisation, categorisation, metadata extraction and vision all found no
+provider and recorded NOT_SUPPORTED, while Settings showed the provider as
+correctly configured. ProviderRestorer now restores it at application start and
+before each worker run.
+
+The one method that could have restored it, getCloudConfig, collected
+DataStore.data — an infinite flow — instead of taking first(), so it never
+returned. It had no callers, which is the only reason that had gone unnoticed.
+
+Settings "Test" mutated the live provider: a mistyped key replaced a working
+provider with a broken one, or on the failure branch left none at all, while the
+screen still displayed the old one as current. Testing now uses a throwaway
+provider. Separately, onConfirmCloudConfig only persisted and never activated,
+so a user who skipped Test saved a config that did nothing until next launch.
+
+WRONG RESULTS
+
+Bare month names became hard date filters. "the ramen recipe I may have saved"
+restricted results to the whole of last May and reported "No memories found"
+with nothing to explain it. The preposition is now required.
+
+FtsQuery kept dots inside terms while SQLite's simple tokeniser splits on them,
+so a query for "js" matched a document containing "node.js" in FTS and then
+scored zero against the term "node.js" and was discarded — verbatim the failure
+KeywordScoring's own docstring forbids. Reachable with js, png, pdf, kt, com.
+
+Deleting a Memory left its FTS row behind. memory_search_index is an FTS4
+virtual table and SQLite supports no foreign keys on virtual tables, so unlike
+all ten relational child tables it does not cascade. Deleted text stayed
+matchable and occupied slots inside the query LIMIT.
+
+Temporal parsing sliced the original query using offsets computed on its
+lowercased copy. Lowercasing is not length-preserving — U+0130 becomes two
+characters — so "İSTANBUL trip last week" threw
+StringIndexOutOfBoundsException into an unguarded viewModelScope.launch. A
+crash while typing.
+
+isSearchActive keyed on raw text while results came from FtsQuery.build, which
+returns null for single characters and stopword-only queries. Typing "the" or
+"a" showed a hard "No memories found".
+
+IN (:ids) was unbounded. Room binds one parameter per id and SQLite on API 30 —
+this app's floor — caps them at 999, so the feed would fail outright at a
+thousand Memories. Now chunked.
+
+Onboarding "Retry" was permanently inert: it routed to onStartDownload, which
+returns immediately when no generative model is selected, and since local
+inference is deferred (ADR-0002) there never is one. Users hit a frozen 0%
+screen whose only exit was Cancel. The same null made the header read
+"Downloading " with a blank name for everyone.
+
+Notification deep links destroyed all UI state on every tap and re-fired on
+rotation. onNewIntent only called setIntent, which nothing observes, so a tap at
+a live Activity could not navigate; links appeared to work only because
+FLAG_ACTIVITY_CLEAR_TOP against a standard launch mode forced recreation. Now
+singleTop with the pending id in observable state, consumed once acted on.
+
+UI
+
+Extracted links were inert text, so the whole URL-extraction stage terminated in
+something the user could look at and not use. Now openable.
+
+App icons were rasterised via toBitmap() outside remember, on the main thread,
+for every visible card on every frame.
+
+Delete was long-press-only with no label, so a screen-reader user could not
+discover or reach it at all.
+
+603 unit tests, 56 instrumented, 0 failures. assembleDebug and lintDebug clean.

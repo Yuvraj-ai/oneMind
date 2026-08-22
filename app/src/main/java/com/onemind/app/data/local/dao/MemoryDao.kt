@@ -50,6 +50,32 @@ interface MemoryDao {
     @Query("DELETE FROM content_blocks WHERE memoryId = :memoryId")
     suspend fun deleteContentBlocks(memoryId: Long)
 
+    /**
+     * Memories claimed by a run that is no longer alive.
+     *
+     * A worker killed mid-pipeline leaves PROCESSING behind with nothing to clear
+     * it. [before] is compared against `updatedAt`, which the state transition set,
+     * so a genuinely running pipeline is not swept out from under itself.
+     */
+    @Query(
+        "SELECT id FROM memories WHERE processingState = 'PROCESSING' AND updatedAt < :before"
+    )
+    suspend fun findStaleProcessingIds(before: Long): List<Long>
+
+    /**
+     * Mark stale runs failed, in one statement.
+     *
+     * Conditional on the state so a Memory that finished between the query above and
+     * this write is not dragged back out of READY.
+     */
+    @Query(
+        """
+        UPDATE memories SET processingState = 'FAILED', updatedAt = :now
+        WHERE processingState = 'PROCESSING' AND updatedAt < :before
+        """
+    )
+    suspend fun failStaleProcessing(before: Long, now: Long): Int
+
     @Transaction
     suspend fun insertMemoryWithBlocks(memory: MemoryEntity, blocks: List<ContentBlockEntity>): Long {
         val memoryId = insertMemory(memory)

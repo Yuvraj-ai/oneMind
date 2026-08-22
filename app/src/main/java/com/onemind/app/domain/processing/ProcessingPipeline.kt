@@ -3,6 +3,7 @@ package com.onemind.app.domain.processing
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.repository.DerivedDataRepository
 import com.onemind.app.domain.repository.MemoryRepository
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -59,6 +60,12 @@ class ProcessingPipeline @Inject constructor(
 
             results[stage.id] = try {
                 stage.process(current)
+            } catch (e: CancellationException) {
+                // Not a stage failure. CancellationException extends
+                // IllegalStateException, so the generic catch below would swallow it,
+                // record the stage as Failed, and let the loop carry on running
+                // stages inside a coroutine that has already been cancelled.
+                throw e
             } catch (e: Exception) {
                 StageResult.Failed(
                     reason = e.message ?: "Stage ${stage.id} threw ${e::class.simpleName}",
@@ -91,7 +98,14 @@ class ProcessingPipeline @Inject constructor(
         val ELIGIBLE_ENTRY_STATES = setOf(
             ProcessingState.SAVED,
             ProcessingState.EDITED,
-            ProcessingState.FAILED
+            ProcessingState.FAILED,
+            // Also PROCESSING, which reads like a contradiction and is not. A worker
+            // killed mid-run — process death, or WorkManager stopping it because the
+            // battery dropped — leaves the Memory claimed by a run that no longer
+            // exists. Treating that as ineligible made the state terminal: the retry
+            // returned NotEligible, the worker called that success, and the user had
+            // no route back short of clearing app data.
+            ProcessingState.PROCESSING
         )
     }
 }

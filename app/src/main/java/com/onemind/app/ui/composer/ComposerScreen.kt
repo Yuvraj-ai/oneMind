@@ -1,6 +1,7 @@
 package com.onemind.app.ui.composer
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,11 +58,18 @@ fun ComposerScreen(
         uri?.let { viewModel.onImageAttached(it) }
     }
 
-    // Handle back press — commit memory
+    // Commit on the way out, however the user leaves.
     val handleBack: () -> Unit = {
         viewModel.onLeaveComposer()
         onNavigateBack()
     }
+
+    // The system back gesture has to route through the same commit as the toolbar
+    // arrow. Without this it bypassed onLeaveComposer entirely: anything typed
+    // inside the autosave window was lost outright, and an autosaved Memory stayed
+    // in DRAFT — never enqueued, never enriched, never searchable. Back is how most
+    // people leave a screen, so this was the likeliest way to lose content.
+    BackHandler(onBack = handleBack)
 
     Scaffold(
         topBar = {

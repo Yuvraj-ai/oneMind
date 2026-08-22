@@ -216,14 +216,21 @@ class ProcessingPipelineTest {
     }
 
     @Test
-    fun `a memory already PROCESSING is not picked up twice`() = runTest {
+    fun `a memory left in PROCESSING by a dead run is resumed, not abandoned`() = runTest {
+        // This used to assert NotEligible, which is what made an interrupted run
+        // terminal: a worker killed mid-pipeline left PROCESSING behind, the retry
+        // declined to touch it, the worker reported success, and the Memory span
+        // forever with no retry affordance — retry being offered only for FAILED.
+        //
+        // Mutual exclusion comes from WorkManager's single serial chain, not from
+        // refusing re-entry here.
         coEvery { memoryRepository.getMemoryById(1L) } returns memoryIn(ProcessingState.PROCESSING)
 
         val outcome = pipelineWith(stage(StageId.OCR)).run(1L)
 
-        assertTrue(outcome is PipelineOutcome.NotEligible)
-        assertTrue(executionOrder.isEmpty())
-        coVerify(exactly = 0) { memoryRepository.transitionState(any(), any()) }
+        assertTrue(outcome is PipelineOutcome.Completed)
+        assertEquals(listOf(StageId.OCR), executionOrder)
+        coVerify { memoryRepository.transitionState(1L, ProcessingState.READY) }
     }
 
     @Test

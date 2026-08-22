@@ -140,7 +140,24 @@ class TemporalExpressionParserTest {
     fun `in December resolves to LAST December, not a future one`() {
         // The critical case. Reading it as this year's December would produce a
         // range in the future and return nothing, with no hint as to why.
-        assertEquals(LocalDate.of(2025, 12, 1), startDate("stuff from December"))
+        assertEquals(LocalDate.of(2025, 12, 1), startDate("stuff from in December"))
+    }
+
+    @Test
+    fun `the preposition is required, so a bare month name is not a date`() {
+        // "may" and "march" are ordinary English words. An optional preposition
+        // turned "the recipe I may have saved" into a filter for the whole of last
+        // May, which — since temporal is a hard filter — discarded nearly every
+        // Memory and reported "No memories found" with nothing to explain it.
+        assertNull(parse("the recipe I may have saved"))
+        assertNull(parse("protest march photos"))
+        assertNull(parse("July"))
+    }
+
+    @Test
+    fun `during and back in also introduce a month`() {
+        assertEquals(LocalDate.of(2026, 7, 1), startDate("photos during July"))
+        assertEquals(LocalDate.of(2026, 7, 1), startDate("photos back in July"))
     }
 
     @Test
@@ -160,8 +177,9 @@ class TemporalExpressionParserTest {
     }
 
     @Test
-    fun `the word in is optional`() {
-        assertEquals(startDate("in July"), startDate("July"))
+    fun `a bare month name is not a date, since may and march are also words`() {
+        assertNotNull(startDate("in July"))
+        assertNull(parse("July"))
     }
 
     @Test

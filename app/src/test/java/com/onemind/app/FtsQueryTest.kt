@@ -172,13 +172,15 @@ class FtsQueryTest {
     // --- domains survive ---------------------------------------------------
 
     @Test
-    fun `a domain stays one term`() {
-        // Dots are kept so "github.com" is searchable as indexed.
-        assertEquals("github.com*", FtsQuery.build("github.com"))
+    fun `a domain is split on the dot, matching how FTS tokenises it`() {
+        // SQLite's simple tokeniser stores "github.com" as two tokens. Keeping the
+        // dot here would make a query for "com" match in FTS and then score zero,
+        // so the row would be found by the index and dropped by our own arithmetic.
+        assertEquals("github* OR com*", FtsQuery.build("github.com"))
     }
 
     @Test
-    fun `a trailing dot is trimmed`() {
+    fun `a trailing dot produces no empty term`() {
         assertEquals("ramen*", FtsQuery.build("ramen."))
     }
 
