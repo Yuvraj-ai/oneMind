@@ -24,6 +24,17 @@ class NotificationChannels @Inject constructor(
     companion object {
         /** Confirmations after Screen Capture, Share, and Clipboard saves. */
         const val CHANNEL_CAPTURES = "memory_captures"
+
+        /**
+         * The mandatory foreground-service notification shown while a screen
+         * capture is in flight.
+         *
+         * Separate from [CHANNEL_CAPTURES] and deliberately IMPORTANCE_LOW: it is
+         * a transient technical requirement that lives for about a second, not
+         * something the user wants announced. Keeping it on its own channel also
+         * means muting it does not mute the save confirmations they do want.
+         */
+        const val CHANNEL_CAPTURE_SERVICE = "capture_service"
     }
 
     fun create() {
@@ -39,6 +50,16 @@ class NotificationChannels @Inject constructor(
             description = "Confirmations when a memory is captured via screenshot, share, or clipboard."
         }
 
+        val captureService = NotificationChannel(
+            CHANNEL_CAPTURE_SERVICE,
+            "Screen Capture",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Shown briefly while a screenshot is being taken."
+            setShowBadge(false)
+        }
+
         manager.createNotificationChannel(captures)
+        manager.createNotificationChannel(captureService)
     }
 }

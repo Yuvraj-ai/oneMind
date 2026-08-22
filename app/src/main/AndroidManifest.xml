@@ -5,6 +5,14 @@
     <!-- Notification permission (Android 13+ / Tiramisu). Graceful if denied. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+      Screen capture runs in a foreground service because Android 14 requires a
+      mediaProjection-typed FGS to be running before the projection can be
+      obtained. The service lives for about a second per capture.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
     <application
         android:name=".OneMindApplication"
         android:allowBackup="true"
@@ -84,6 +92,38 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- Quick Settings tile: Capture Screen -->
+        <service
+            android:name=".capture.ScreenCaptureTileService"
+            android:exported="true"
+            android:label="Capture Screen"
+            android:icon="@drawable/ic_notification"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!--
+          Invisible broker for MediaProjection consent. A TileService cannot call
+          startActivityForResult, so the tile launches this instead.
+        -->
+        <activity
+            android:name=".capture.ScreenCapturePermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!--
+          foregroundServiceType="mediaProjection" is mandatory: without it,
+          getMediaProjection() throws on Android 14+.
+        -->
+        <service
+            android:name=".capture.ScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
     </application>
 

@@ -67,8 +67,7 @@ class CaptureNotifier @Inject constructor(
             builder.setLargeIcon(thumbnail)
         }
 
-        NotificationManagerCompat.from(context)
-            .notify(notificationId(memoryId), builder.build())
+        post(notificationId(memoryId), builder.build())
     }
 
     /**
@@ -87,8 +86,23 @@ class CaptureNotifier @Inject constructor(
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
 
-        NotificationManagerCompat.from(context)
-            .notify(System.currentTimeMillis().toInt(), builder.build())
+        post(System.currentTimeMillis().toInt(), builder.build())
+    }
+
+    /**
+     * Hand the notification to the system, tolerating refusal.
+     *
+     * [hasPermission] is checked before building, but that check and this call are
+     * not atomic: the user can revoke notification access in the gap, and some OEM
+     * builds throw here for their own reasons. Since the Memory is already saved by
+     * this point, a failed notification must not surface as a failed capture.
+     */
+    private fun post(id: Int, notification: android.app.Notification) {
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check and here. The save succeeded.
+        }
     }
 
     private fun hasPermission(): Boolean {
