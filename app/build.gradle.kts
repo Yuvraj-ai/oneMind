@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "com.onemind.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.onemind.app"
         minSdk = 30
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
 
@@ -42,6 +42,15 @@ android {
     buildFeatures {
         compose = true
     }
+}
+
+/**
+ * Export Room schemas so migrations can be verified against them. Ticket #10
+ * introduces the first migration, and a migration test needs the schema of the
+ * version it migrates from.
+ */
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

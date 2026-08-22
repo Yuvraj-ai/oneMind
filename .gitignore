@@ -18,4 +18,6 @@ app/debug/
 *.class
 
 # Generated
-app/schemas/
+# NOTE: app/schemas/ is deliberately NOT ignored. Room exports schema JSON there
+# and migration tests verify against the schema of the version they migrate from,
+# so those files are source, not build output.

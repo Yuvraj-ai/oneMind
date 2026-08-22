@@ -16,6 +16,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.onemind.app.domain.model.ContentBlock
@@ -146,7 +147,7 @@ private fun ContentBlockView(block: ContentBlock) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.FitWidth
+                contentScale = ContentScale.FillWidth
             )
         }
         ContentType.URL -> {
