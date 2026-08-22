@@ -1,8 +1,11 @@
 package com.onemind.app.data.repository
 
+import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
+import com.onemind.app.data.local.entity.DerivedMapper
 import com.onemind.app.data.local.entity.EntityMapper.toDomain
 import com.onemind.app.data.local.entity.EntityMapper.toEntity
+import com.onemind.app.domain.model.DerivedData
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.repository.InvalidStateTransitionException
@@ -15,17 +18,42 @@ import javax.inject.Singleton
 
 @Singleton
 class MemoryRepositoryImpl @Inject constructor(
-    private val memoryDao: MemoryDao
+    private val memoryDao: MemoryDao,
+    private val derivedDataDao: DerivedDataDao
 ) : MemoryRepository {
 
+    /**
+     * Feed stream. Carries the summary but not the rest of the derived data:
+     * cards show a summary, and loading OCR text and entity lists for every row
+     * would be paid on every scroll for data nothing on screen reads.
+     */
     override fun observeAllMemories(): Flow<List<Memory>> {
-        return memoryDao.observeAllMemories().map { list ->
-            list.map { it.toDomain() }
+        return memoryDao.observeAllMemories().map { rows ->
+            if (rows.isEmpty()) return@map emptyList()
+
+            val summaries = derivedDataDao
+                .getSummaries(rows.map { it.memory.id })
+                .associateBy { it.memoryId }
+
+            rows.map { row ->
+                val memory = row.toDomain()
+                val summary = summaries[row.memory.id] ?: return@map memory
+                with(DerivedMapper) {
+                    memory.copy(derived = DerivedData(summary = summary.toDomain()))
+                }
+            }
         }
     }
 
+    /**
+     * A whole Memory, enrichments included.
+     *
+     * The pipeline relies on this: it re-reads the Memory between stages so each
+     * stage can read what the ones before it wrote.
+     */
     override suspend fun getMemoryById(id: Long): Memory? {
-        return memoryDao.getMemoryById(id)?.toDomain()
+        val row = memoryDao.getMemoryById(id) ?: return null
+        return row.toDomain().copy(derived = loadDerivedData(id))
     }
 
     override suspend fun createMemory(memory: Memory): Long {
@@ -45,6 +73,7 @@ class MemoryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteMemory(id: Long) {
+        // Derived rows cascade from the memories foreign key, so they go too.
         memoryDao.deleteMemory(id)
     }
 
@@ -62,6 +91,17 @@ class MemoryRepositoryImpl @Inject constructor(
             memoryId = memoryId,
             state = newState,
             updatedAt = Instant.now().toEpochMilli()
+        )
+    }
+
+    private suspend fun loadDerivedData(memoryId: Long): DerivedData = with(DerivedMapper) {
+        DerivedData(
+            ocrResults = derivedDataDao.getOcrResults(memoryId).map { it.toDomain() },
+            visionResults = derivedDataDao.getVisionResults(memoryId).map { it.toDomain() },
+            urls = derivedDataDao.getUrls(memoryId).map { it.toDomain() },
+            dates = derivedDataDao.getDates(memoryId).map { it.toDomain() },
+            entities = derivedDataDao.getEntities(memoryId).map { it.toDomain() },
+            summary = derivedDataDao.getSummary(memoryId)?.toDomain()
         )
     }
 }

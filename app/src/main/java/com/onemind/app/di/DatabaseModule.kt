@@ -2,7 +2,9 @@ package com.onemind.app.di
 
 import android.content.Context
 import androidx.room.Room
+import com.onemind.app.data.local.Migrations
 import com.onemind.app.data.local.OneMindDatabase
+import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
 import dagger.Module
 import dagger.Provides
@@ -22,11 +24,18 @@ object DatabaseModule {
             context,
             OneMindDatabase::class.java,
             "onemind.db"
-        ).build()
+        )
+            .addMigrations(*Migrations.ALL)
+            .build()
     }
 
     @Provides
     fun provideMemoryDao(database: OneMindDatabase): MemoryDao {
         return database.memoryDao()
+    }
+
+    @Provides
+    fun provideDerivedDataDao(database: OneMindDatabase): DerivedDataDao {
+        return database.derivedDataDao()
     }
 }

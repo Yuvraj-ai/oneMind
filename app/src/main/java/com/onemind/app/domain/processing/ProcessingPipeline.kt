@@ -1,6 +1,7 @@
 package com.onemind.app.domain.processing
 
 import com.onemind.app.domain.model.ProcessingState
+import com.onemind.app.domain.repository.DerivedDataRepository
 import com.onemind.app.domain.repository.MemoryRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class ProcessingPipeline @Inject constructor(
     private val memoryRepository: MemoryRepository,
+    private val derivedDataRepository: DerivedDataRepository,
     private val stages: ProcessingStageRegistry
 ) {
 
@@ -40,6 +42,13 @@ class ProcessingPipeline @Inject constructor(
         }
 
         memoryRepository.transitionState(memoryId, ProcessingState.PROCESSING)
+
+        // Content changed, so the existing inferences describe text that no
+        // longer exists. Clearing here rather than in the composer means every
+        // capture path gets it, including the ones not built yet.
+        if (entryState == ProcessingState.EDITED) {
+            derivedDataRepository.clearDerivedData(memoryId)
+        }
 
         val results = mutableMapOf<StageId, StageResult>()
         for (stage in stages.all()) {

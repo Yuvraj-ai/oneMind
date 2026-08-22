@@ -70,6 +70,14 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+/**
+ * MigrationTestHelper reads the exported schemas from the test APK's assets, so
+ * the schema directory has to be on the androidTest asset path.
+ */
+android.sourceSets.getByName("androidTest") {
+    assets.srcDir("$projectDir/schemas")
+}
+
 dependencies {
     // AndroidX Core
     implementation(libs.androidx.core.ktx)

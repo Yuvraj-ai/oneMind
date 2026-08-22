@@ -1,6 +1,8 @@
 package com.onemind.app.di
 
+import com.onemind.app.data.repository.DerivedDataRepositoryImpl
 import com.onemind.app.data.repository.MemoryRepositoryImpl
+import com.onemind.app.domain.repository.DerivedDataRepository
 import com.onemind.app.domain.repository.MemoryRepository
 import dagger.Binds
 import dagger.Module
@@ -17,4 +19,10 @@ abstract class RepositoryModule {
     abstract fun bindMemoryRepository(
         impl: MemoryRepositoryImpl
     ): MemoryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDerivedDataRepository(
+        impl: DerivedDataRepositoryImpl
+    ): DerivedDataRepository
 }

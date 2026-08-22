@@ -1,5 +1,6 @@
 package com.onemind.app
 
+import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.ContentBlockEntity
 import com.onemind.app.data.local.entity.MemoryEntity
@@ -19,12 +20,14 @@ import java.time.Instant
 class MemoryRepositoryTest {
 
     private lateinit var memoryDao: MemoryDao
+    private lateinit var derivedDataDao: DerivedDataDao
     private lateinit var repository: MemoryRepositoryImpl
 
     @Before
     fun setup() {
         memoryDao = mockk(relaxed = true)
-        repository = MemoryRepositoryImpl(memoryDao)
+        derivedDataDao = mockk(relaxed = true)
+        repository = MemoryRepositoryImpl(memoryDao, derivedDataDao)
     }
 
     @Test

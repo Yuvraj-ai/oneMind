@@ -3,6 +3,7 @@ package com.onemind.app
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.processing.*
+import com.onemind.app.domain.repository.DerivedDataRepository
 import com.onemind.app.domain.repository.MemoryRepository
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
@@ -18,6 +19,7 @@ import org.junit.Test
 class ProcessingPipelineTest {
 
     private lateinit var memoryRepository: MemoryRepository
+    private lateinit var derivedDataRepository: DerivedDataRepository
 
     /** Records the order stages ran in, so ordering can be asserted. */
     private val executionOrder = mutableListOf<StageId>()
@@ -25,6 +27,7 @@ class ProcessingPipelineTest {
     @Before
     fun setup() {
         memoryRepository = mockk(relaxed = true)
+        derivedDataRepository = mockk(relaxed = true)
         executionOrder.clear()
     }
 
@@ -51,6 +54,7 @@ class ProcessingPipelineTest {
 
     private fun pipelineWith(vararg stages: ProcessingStage) = ProcessingPipeline(
         memoryRepository = memoryRepository,
+        derivedDataRepository = derivedDataRepository,
         stages = ProcessingStageRegistry(stages.toSet())
     )
 
@@ -167,6 +171,38 @@ class ProcessingPipelineTest {
 
         assertTrue(outcome is PipelineOutcome.Completed)
         coVerify { memoryRepository.transitionState(1L, ProcessingState.PROCESSING) }
+    }
+
+    @Test
+    fun `an EDITED memory has its stale derived data cleared before stages run`() = runTest {
+        coEvery { memoryRepository.getMemoryById(1L) } returns memoryIn(ProcessingState.EDITED)
+
+        pipelineWith(stage(StageId.OCR)).run(1L)
+
+        coVerifyOrder {
+            derivedDataRepository.clearDerivedData(1L)
+            memoryRepository.transitionState(1L, ProcessingState.READY)
+        }
+    }
+
+    @Test
+    fun `a freshly SAVED memory has nothing to clear`() = runTest {
+        coEvery { memoryRepository.getMemoryById(1L) } returns memoryIn(ProcessingState.SAVED)
+
+        pipelineWith(stage(StageId.OCR)).run(1L)
+
+        coVerify(exactly = 0) { derivedDataRepository.clearDerivedData(any()) }
+    }
+
+    @Test
+    fun `a retried FAILED memory keeps whatever partial enrichment it has`() = runTest {
+        // A retry resumes rather than restarting: stages that already succeeded
+        // wrote real data, and re-running them will simply overwrite it.
+        coEvery { memoryRepository.getMemoryById(1L) } returns memoryIn(ProcessingState.FAILED)
+
+        pipelineWith(stage(StageId.OCR)).run(1L)
+
+        coVerify(exactly = 0) { derivedDataRepository.clearDerivedData(any()) }
     }
 
     @Test
