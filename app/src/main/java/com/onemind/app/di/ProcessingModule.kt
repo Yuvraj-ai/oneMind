@@ -1,17 +1,22 @@
 package com.onemind.app.di
 
+import com.onemind.app.data.ocr.MlKitTextRecognizer
 import com.onemind.app.domain.processing.ProcessingStage
+import com.onemind.app.domain.processing.TextRecognizer
+import com.onemind.app.domain.processing.stages.OcrStage
+import dagger.Binds
 import dagger.Module
+import dagger.multibindings.IntoSet
 import dagger.multibindings.Multibinds
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 
 /**
- * Declares the multibound set of [ProcessingStage]s.
+ * Wires the Processing Pipeline's stages.
  *
- * `@Multibinds` lets the set be legitimately empty, which is exactly the state
- * this ticket lands in: the pipeline machinery works, and each later ticket
- * binds its stage into this set with `@Binds @IntoSet`.
+ * `@Multibinds` lets the stage set be legitimately empty, which is how it
+ * started life. Each stage is added with one `@Binds @IntoSet` line and the
+ * pipeline never changes.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -19,4 +24,11 @@ abstract class ProcessingModule {
 
     @Multibinds
     abstract fun processingStages(): Set<ProcessingStage>
+
+    @Binds
+    @IntoSet
+    abstract fun bindOcrStage(stage: OcrStage): ProcessingStage
+
+    @Binds
+    abstract fun bindTextRecognizer(impl: MlKitTextRecognizer): TextRecognizer
 }

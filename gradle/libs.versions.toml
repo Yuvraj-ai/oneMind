@@ -19,6 +19,11 @@ coil = "2.7.0"
 datastore = "1.1.4"
 work = "2.10.0"
 hiltWork = "1.2.0"
+# ML Kit text recognition. 16.0.1 is what Google marks as <release> in their own
+# maven-metadata and has been the stable release since Aug 2024, so it is
+# thoroughly seasoned rather than newest-available. Do not move to a
+# 16.0.0-beta* artifact: those sort *below* 16.0.0 and are pre-releases of it.
+mlkitTextRecognition = "16.0.1"
 
 [libraries]
 # AndroidX Core
@@ -75,6 +80,13 @@ mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+
+# ML Kit — bundled Latin text recognition. The bundled artifact ships the model
+# inside the APK, so OCR works on first launch with no download and no Play
+# Services round trip. The unbundled alternative
+# (com.google.android.gms:play-services-mlkit-text-recognition) would make OCR
+# depend on a dynamic model download, which contradicts local-first.
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

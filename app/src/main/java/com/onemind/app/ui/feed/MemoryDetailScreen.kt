@@ -22,6 +22,7 @@ import coil.request.ImageRequest
 import com.onemind.app.domain.model.ContentBlock
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
+import com.onemind.app.domain.processing.StageStatus
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -124,7 +125,66 @@ private fun MemoryDetailContent(
         memory.contentBlocks.sortedBy { it.position }.forEach { block ->
             ContentBlockView(block = block)
         }
+
+        // What the pipeline read out of the images. Kept visually distinct from
+        // the content above, because this is a machine's reading of the Memory,
+        // not something the user wrote.
+        RecognizedTextSection(memory = memory)
     }
+}
+
+@Composable
+private fun RecognizedTextSection(memory: Memory) {
+    val ocrResults = memory.derived.ocrResults
+    if (ocrResults.isEmpty()) return
+
+    val withText = ocrResults.filter {
+        it.status == StageStatus.SUCCESS && it.extractedText.isNotBlank()
+    }
+    val allEmpty = ocrResults.all { it.status == StageStatus.EMPTY }
+    val allFailed = ocrResults.all { it.status == StageStatus.FAILED }
+
+    Spacer(modifier = Modifier.height(8.dp))
+    HorizontalDivider()
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Text(
+        text = "Text in images",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    when {
+        withText.isNotEmpty() -> {
+            withText.forEach { result ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = result.extractedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+        }
+        // Say which of the three it is. "No text found" and "could not read the
+        // image" are different facts and the user can act on the second one.
+        allEmpty -> StatusNote("No text found in these images.")
+        allFailed -> StatusNote("Could not read these images.")
+        else -> StatusNote("No text found.")
+    }
+}
+
+@Composable
+private fun StatusNote(message: String) {
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 @Composable
