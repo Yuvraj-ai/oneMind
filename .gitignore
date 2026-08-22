@@ -3,6 +3,13 @@
 build/
 local.properties
 
+# Signing. The keystore and its passwords must never be committed: anyone holding
+# them can publish an update that Android will install over a user's existing
+# oneMind. See RELEASING.md.
+keystore.properties
+*.jks
+*.keystore
+
 # IDE
 .idea/
 *.iml

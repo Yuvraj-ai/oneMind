@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -20,6 +22,46 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    /**
+     * Release signing.
+     *
+     * Credentials come from `keystore.properties` (git-ignored) or, in CI, from
+     * environment variables. Neither the keystore nor its passwords are ever in the
+     * repository: anyone holding them can ship an update that Android will install
+     * over a user's existing oneMind, so they are the single most sensitive artifact
+     * in the project.
+     *
+     * When no credentials are present the block is simply absent and `assembleRelease`
+     * produces an unsigned APK. That is deliberate — it lets a contributor verify a
+     * release build compiles without needing the signing key, and it fails visibly at
+     * install time rather than silently shipping something unverifiable.
+     *
+     * See RELEASING.md.
+     */
+    signingConfigs {
+        val keystorePropertiesFile = rootProject.file("keystore.properties")
+        val keystoreProperties = Properties().apply {
+            if (keystorePropertiesFile.exists()) {
+                keystorePropertiesFile.inputStream().use { stream -> load(stream) }
+            }
+        }
+
+        val storePath = keystoreProperties.getProperty("storeFile")
+            ?: System.getenv("ONEMIND_KEYSTORE_PATH")
+
+        if (storePath != null && file(storePath).exists()) {
+            create("release") {
+                storeFile = file(storePath)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                    ?: System.getenv("ONEMIND_KEYSTORE_PASSWORD")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                    ?: System.getenv("ONEMIND_KEY_ALIAS")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                    ?: System.getenv("ONEMIND_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -27,6 +69,47 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Only when credentials were found. Without this the release APK is
+            // unsigned, which is the honest outcome of building without the key.
+            signingConfig = signingConfigs.findByName("release")
+
+            ndk {
+                /*
+                 * Ship ARM only.
+                 *
+                 * MediaPipe and ML Kit contribute large native libraries — around
+                 * 45MB per ABI — so a universal APK came to 152MB, of which roughly
+                 * 60MB was x86 and x86_64. Those exist for emulators and a handful of
+                 * Chromebooks, not for the phones this app targets, and every user
+                 * was downloading all four architectures to run one.
+                 *
+                 * Debug builds keep every ABI, so the x86_64 emulator still runs the
+                 * instrumented suite. This filter applies to release only.
+                 */
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            }
+        }
+    }
+
+    packaging {
+        jniLibs {
+            /*
+             * Drop the LLM inference runtime.
+             *
+             * `tasks-text` depends on `tasks-core`, which is one AAR carrying the
+             * native library for every MediaPipe task type — including
+             * `libmediapipe_tasks_textgenai_jni.so`, about 14MB per ABI, which
+             * implements on-device LLM inference. oneMind uses `TextEmbedder` only,
+             * and local generative inference is deferred (ADR-0002), so nothing in
+             * the app can reach that runtime.
+             *
+             * Excluded rather than tolerated because 28MB of the two shipped ABIs is
+             * a quarter of the download for code that cannot execute. If a future
+             * change revives local inference, this exclusion has to go with it, and
+             * the symptom of forgetting would be an UnsatisfiedLinkError on first
+             * use rather than a build failure — hence the note.
+             */
+            excludes += "**/libmediapipe_tasks_textgenai_jni.so"
         }
     }
 
