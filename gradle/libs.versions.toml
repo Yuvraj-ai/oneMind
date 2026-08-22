@@ -24,6 +24,11 @@ hiltWork = "1.2.0"
 # thoroughly seasoned rather than newest-available. Do not move to a
 # 16.0.0-beta* artifact: those sort *below* 16.0.0 and are pre-releases of it.
 mlkitTextRecognition = "16.0.1"
+# MediaPipe Text tasks. 1.0.0 is a genuine stable major release (Jul 2026).
+# Note this is NOT the same artifact as tasks-genai (0.10.x, maintenance-only);
+# the LLM Inference deprecation does not apply to tasks-text. TextEmbedder here
+# handles tokenization internally, which is why we do not need SentencePiece.
+mediapipeTasksText = "1.0.0"
 
 [libraries]
 # AndroidX Core
@@ -87,6 +92,9 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 # (com.google.android.gms:play-services-mlkit-text-recognition) would make OCR
 # depend on a dynamic model download, which contradicts local-first.
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+
+# MediaPipe Text Embedder — on-device embeddings on a stable 1.0.0 API.
+mediapipe-tasks-text = { group = "com.google.mediapipe", name = "tasks-text", version.ref = "mediapipeTasksText" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

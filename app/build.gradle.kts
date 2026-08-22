@@ -132,6 +132,9 @@ dependencies {
     // On-device OCR
     implementation(libs.mlkit.text.recognition)
 
+    // On-device text embeddings
+    implementation(libs.mediapipe.tasks.text)
+
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

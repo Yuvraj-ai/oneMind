@@ -52,9 +52,22 @@ class ModelRegistryTest {
 
     @Test
     fun `the embedding model declares its real dimensionality`() {
-        // Gecko-110m emits 768. The vector column and every similarity
-        // computation depend on this being right.
-        assertEquals(768, registry.embeddingModel.outputDimensions)
+        // Verified on-device by EmbeddingGeneratorTest rather than taken from
+        // documentation. The generator reads dimensionality from the loaded model
+        // at runtime and does not trust this value, so a mismatch surfaces as a
+        // failing test rather than as corrupt vectors in the index.
+        assertEquals(100, registry.embeddingModel.outputDimensions)
+    }
+
+    @Test
+    fun `the embedding model needs no separate tokenizer`() {
+        // MediaPipe's Text Embedder tokenizes inside the task. Gecko ships a
+        // separate sentencepiece.model and would have meant implementing
+        // SentencePiece in Kotlin for no gain.
+        assertTrue(
+            "expected a MediaPipe-hosted embedder model, got ${registry.embeddingModel.downloadUrl}",
+            registry.embeddingModel.downloadUrl.contains("mediapipe-models")
+        )
     }
 
     @Test

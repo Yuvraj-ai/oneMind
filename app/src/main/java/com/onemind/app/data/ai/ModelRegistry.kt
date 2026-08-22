@@ -35,22 +35,32 @@ class ModelRegistry @Inject constructor() {
     val generativeModels: List<ModelInfo> = emptyList()
 
     /**
-     * The embedding model. Small, ungated, and runs on stable LiteRT 2.2.0.
+     * The embedding model. Small, ungated, and runs on MediaPipe's stable
+     * `tasks-text` 1.0.0 Text Embedder.
      *
-     * Gecko rather than EmbeddingGemma: every Gemma repository on LiteRT
-     * Community is `gated`, which needs an authenticated licence-accepting
-     * request, and oneMind promises no accounts.
+     * Universal Sentence Encoder, chosen after measurement. The obvious first
+     * pick, MediaPipe's `bert_embedder`, is a generic BERT feature extractor, and
+     * on-device testing showed it unusable for retrieval: unrelated text
+     * ("a recipe for lemon drizzle cake") scored 0.97 against "running AI models
+     * locally on a phone", while genuinely related text scored 0.86. Every pair
+     * scored near 1.0, which is the signature of vectors clustered in a narrow
+     * cone. Raw BERT embeddings are known to be poor for sentence similarity;
+     * Universal Sentence Encoder is trained for exactly that.
      *
-     * The 512-token variant is the middle of four sequence lengths (64, 256, 512,
-     * 1024). Memories are short, and a longer window costs size for capacity that
-     * would mostly go unused.
+     * Not Gecko: it ships a separate `sentencepiece.model`, so it would mean
+     * implementing SentencePiece in Kotlin. Not EmbeddingGemma: every Gemma
+     * repository is gated, and oneMind promises no accounts.
+     *
+     * [outputDimensions] comes from a real on-device run
+     * (`EmbeddingGeneratorTest`), not from documentation. The generator reads
+     * dimensionality from the loaded model and does not trust this number.
      */
     val embeddingModel: EmbeddingModelInfo = EmbeddingModelInfo(
-        id = "gecko-110m-en-512-quant",
-        displayName = "Gecko 110M (English)",
-        downloadSizeMb = 115,
-        downloadUrl = "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_512_quant.tflite",
-        outputDimensions = 768,
+        id = "mediapipe-universal-sentence-encoder",
+        displayName = "Universal Sentence Encoder",
+        downloadSizeMb = 6,
+        downloadUrl = "https://storage.googleapis.com/mediapipe-models/text_embedder/universal_sentence_encoder/float32/latest/universal_sentence_encoder.tflite",
+        outputDimensions = 100,
         format = ModelFormat.LITERT
     )
 
