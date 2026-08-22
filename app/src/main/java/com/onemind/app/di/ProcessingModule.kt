@@ -1,10 +1,13 @@
 package com.onemind.app.di
 
+import com.onemind.app.data.ai.MediaPipeEmbeddingGenerator
 import com.onemind.app.data.ai.ProviderImageDescriber
 import com.onemind.app.data.ocr.MlKitTextRecognizer
+import com.onemind.app.domain.processing.EmbeddingGenerator
 import com.onemind.app.domain.processing.ImageDescriber
 import com.onemind.app.domain.processing.ProcessingStage
 import com.onemind.app.domain.processing.TextRecognizer
+import com.onemind.app.domain.processing.stages.EmbeddingStage
 import com.onemind.app.domain.processing.stages.OcrStage
 import com.onemind.app.domain.processing.stages.VisionStage
 import dagger.Binds
@@ -38,8 +41,17 @@ abstract class ProcessingModule {
     abstract fun bindVisionStage(stage: VisionStage): ProcessingStage
 
     @Binds
+    @IntoSet
+    abstract fun bindEmbeddingStage(stage: EmbeddingStage): ProcessingStage
+
+    @Binds
     abstract fun bindTextRecognizer(impl: MlKitTextRecognizer): TextRecognizer
 
     @Binds
     abstract fun bindImageDescriber(impl: ProviderImageDescriber): ImageDescriber
+
+    @Binds
+    abstract fun bindEmbeddingGenerator(
+        impl: MediaPipeEmbeddingGenerator
+    ): EmbeddingGenerator
 }
