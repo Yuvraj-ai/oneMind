@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.data.storage.ImageFileStorage
 import com.onemind.app.domain.model.*
 import com.onemind.app.domain.repository.MemoryRepository
@@ -23,6 +24,7 @@ import javax.inject.Inject
 class ComposerViewModel @Inject constructor(
     private val memoryRepository: MemoryRepository,
     private val imageFileStorage: ImageFileStorage,
+    private val processingScheduler: ProcessingScheduler,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -116,7 +118,10 @@ class ComposerViewModel @Inject constructor(
 
     /**
      * Called when the user leaves the composer (back navigation).
-     * Commits the memory: transitions to SAVED state.
+     *
+     * This is the moment a Memory becomes eligible for enrichment. Auto-save
+     * alone deliberately does not trigger processing: the user should be able to
+     * keep adding to a draft without competing with background work.
      */
     fun onLeaveComposer() {
         autoSaveJob?.cancel()
@@ -129,16 +134,26 @@ class ComposerViewModel @Inject constructor(
                 return@launch
             }
 
-            val memoryId = saveMemory()
-            if (memoryId != null) {
-                // Transition from DRAFT to SAVED
+            val memoryId = saveMemory() ?: return@launch
+
+            // A fresh draft needs committing; an edited Memory is already in
+            // EDITED (set during save) and is eligible as-is.
+            val committed = memoryRepository.getMemoryById(memoryId)
+            if (committed?.processingState == ProcessingState.DRAFT) {
                 try {
                     memoryRepository.transitionState(memoryId, ProcessingState.SAVED)
                 } catch (_: Exception) {
-                    // Already in SAVED or beyond — that's fine
+                    // Raced with another commit — the Memory is already past DRAFT.
                 }
-                _uiState.update { it.copy(isCommitted = true) }
             }
+
+            // Hand off to the background pipeline. Capture is done either way.
+            val eligible = memoryRepository.getMemoryById(memoryId)?.processingState
+            if (eligible == ProcessingState.SAVED || eligible == ProcessingState.EDITED) {
+                processingScheduler.enqueue(memoryId)
+            }
+
+            _uiState.update { it.copy(isCommitted = true) }
         }
     }
 

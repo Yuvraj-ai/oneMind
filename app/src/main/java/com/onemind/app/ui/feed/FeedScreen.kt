@@ -84,6 +84,7 @@ fun FeedScreen(
                         memories = uiState.memories,
                         onMemoryClick = { onNavigateToMemory(it.id) },
                         onMemoryLongClick = { viewModel.requestDelete(it) },
+                        onRetryProcessing = { viewModel.retryProcessing(it) },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -153,6 +154,7 @@ private fun MemoryFeedList(
     memories: List<com.onemind.app.domain.model.Memory>,
     onMemoryClick: (com.onemind.app.domain.model.Memory) -> Unit,
     onMemoryLongClick: (com.onemind.app.domain.model.Memory) -> Unit,
+    onRetryProcessing: (com.onemind.app.domain.model.Memory) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -167,7 +169,8 @@ private fun MemoryFeedList(
             MemoryCard(
                 memory = memory,
                 onClick = { onMemoryClick(memory) },
-                onLongClick = { onMemoryLongClick(memory) }
+                onLongClick = { onMemoryLongClick(memory) },
+                onRetryProcessing = { onRetryProcessing(memory) }
             )
         }
     }

@@ -22,6 +22,22 @@
             </intent-filter>
         </activity>
 
+        <!--
+          oneMind supplies its own WorkManager Configuration (see
+          OneMindApplication) so Hilt can inject dependencies into workers.
+          The default initializer must be removed for that to take effect.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
     </application>
 
 </manifest>

@@ -17,6 +17,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
+import com.onemind.app.domain.model.ProcessingState
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -33,6 +34,7 @@ fun MemoryCard(
     memory: Memory,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onRetryProcessing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -93,8 +95,65 @@ fun MemoryCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                ProcessingStatusRow(
+                    state = memory.processingState,
+                    onRetry = onRetryProcessing
+                )
             }
         }
+    }
+}
+
+/**
+ * Shows enrichment status only while it is worth showing: a quiet spinner during
+ * processing, a retry affordance on failure, and nothing at all once the Memory
+ * is READY.
+ */
+@Composable
+private fun ProcessingStatusRow(
+    state: ProcessingState,
+    onRetry: () -> Unit
+) {
+    when (state) {
+        ProcessingState.PROCESSING -> {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Enriching",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        ProcessingState.FAILED -> {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Enrichment failed",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = onRetry,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    modifier = Modifier.height(24.dp)
+                ) {
+                    Text("Retry", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        // DRAFT, SAVED, EDITED and READY need no indicator: the Memory is
+        // already usable and the work is either done or not worth announcing.
+        else -> Unit
     }
 }
 
