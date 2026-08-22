@@ -130,6 +130,7 @@ private fun MemoryDetailContent(
         // the content above, because this is a machine's reading of the Memory,
         // not something the user wrote.
         RecognizedTextSection(memory = memory)
+        ImageDescriptionSection(memory = memory)
     }
 }
 
@@ -175,6 +176,60 @@ private fun RecognizedTextSection(memory: Memory) {
         allEmpty -> StatusNote("No text found in these images.")
         allFailed -> StatusNote("Could not read these images.")
         else -> StatusNote("No text found.")
+    }
+}
+
+@Composable
+private fun ImageDescriptionSection(memory: Memory) {
+    val visionResults = memory.derived.visionResults
+    if (visionResults.isEmpty()) return
+
+    val described = visionResults.filter {
+        it.status == StageStatus.SUCCESS && it.description.isNotBlank()
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+    HorizontalDivider()
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Text(
+        text = "Image description",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    when {
+        described.isNotEmpty() -> {
+            described.forEach { result ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = result.description,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        result.providerModel?.let { model ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "by $model",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        // These three are genuinely different facts. Only the first is something
+        // the user can act on, by choosing a vision-capable model.
+        visionResults.all { it.status == StageStatus.NOT_SUPPORTED } ->
+            StatusNote("Vision unavailable with your current model.")
+        visionResults.all { it.status == StageStatus.FAILED } ->
+            StatusNote("Could not describe these images.")
+        else -> StatusNote("No description produced.")
     }
 }
 

@@ -33,7 +33,7 @@ class OcrStage @Inject constructor(
 
         derivedDataRepository.saveOcrResults(results)
 
-        return aggregate(results)
+        return aggregatePerImageStatuses(results.map { it.status }, stageLabel = "OCR")
     }
 
     private suspend fun recognizeInto(
@@ -58,20 +58,5 @@ class OcrStage @Inject constructor(
             status = status,
             extractedText = text
         )
-    }
-
-    /**
-     * Collapse per-image outcomes into the one result the pipeline sees.
-     *
-     * Partial success counts as success: if four of five images gave up their
-     * text, the Memory genuinely gained something and the pipeline should carry
-     * on. Only a clean sweep of failures is a stage failure, and "every image
-     * ran but none held text" is [StageResult.Empty] rather than either.
-     */
-    private fun aggregate(results: List<OcrResult>): StageResult = when {
-        results.any { it.status == StageStatus.SUCCESS } -> StageResult.Success
-        results.all { it.status == StageStatus.FAILED } ->
-            StageResult.Failed("OCR failed for all ${results.size} image(s)")
-        else -> StageResult.Empty
     }
 }
