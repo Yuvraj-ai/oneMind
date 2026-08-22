@@ -67,6 +67,9 @@ fun OnboardingScreen(
                 onConfirm = { viewModel.onConfirmCloudConfig() },
                 onBack = { viewModel.onBackToModelSelection() }
             )
+            OnboardingStep.PERMISSIONS -> PermissionsScreen(
+                onDone = { viewModel.onPermissionsDone() }
+            )
             OnboardingStep.COMPLETE -> { /* handled above */ }
         }
     }

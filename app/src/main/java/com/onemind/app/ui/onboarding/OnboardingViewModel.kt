@@ -224,7 +224,7 @@ class OnboardingViewModel @Inject constructor(
         val embedding = modelRegistry.embeddingModel
 
         if (modelDownloadManager.isModelDownloaded(embedding.id)) {
-            completeOnboarding()
+            proceedToPermissions()
             return
         }
 
@@ -249,7 +249,7 @@ class OnboardingViewModel @Inject constructor(
                                 totalMb = progress.totalBytes / (1024 * 1024)
                             )
                         }
-                        is DownloadProgress.Completed -> completeOnboarding()
+                        is DownloadProgress.Completed -> proceedToPermissions()
                         is DownloadProgress.Failed -> _uiState.update {
                             it.copy(isDownloading = false, downloadError = progress.error)
                         }
@@ -266,6 +266,23 @@ class OnboardingViewModel @Inject constructor(
                 it.copy(step = OnboardingStep.COMPLETE, isDownloading = false)
             }
         }
+    }
+
+    /**
+     * Route to PERMISSIONS step before completing.
+     *
+     * Called from every path that used to call [completeOnboarding] directly.
+     * Notifications and accessibility are optional — the user can skip them and the
+     * app works, but without notifications the capture tiles look broken (no
+     * feedback), and without accessibility the screen-capture tile can't capture.
+     */
+    fun proceedToPermissions() {
+        _uiState.update { it.copy(step = OnboardingStep.PERMISSIONS, isDownloading = false) }
+    }
+
+    /** Called when the user finishes or skips the permissions step. */
+    fun onPermissionsDone() {
+        completeOnboarding()
     }
 
     fun onCloudBaseUrlChanged(url: String) {

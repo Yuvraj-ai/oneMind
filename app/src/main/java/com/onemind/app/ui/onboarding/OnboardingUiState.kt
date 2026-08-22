@@ -43,6 +43,8 @@ enum class OnboardingStep {
     MODEL_SELECTION,
     DOWNLOADING,
     CLOUD_CONFIG,
+    /** Request notification permission + guide accessibility service toggle. */
+    PERMISSIONS,
     COMPLETE
 }
 
