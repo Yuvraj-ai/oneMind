@@ -10,9 +10,11 @@ import com.onemind.app.domain.processing.stages.CategorizationStage
 import com.onemind.app.domain.processing.stages.EmbeddingStage
 import com.onemind.app.domain.processing.stages.MetadataExtractionStage
 import com.onemind.app.domain.processing.stages.OcrStage
+import com.onemind.app.domain.processing.stages.SearchIndexStage
 import com.onemind.app.domain.processing.stages.SummarizationStage
 import com.onemind.app.domain.processing.stages.VisionStage
 import com.onemind.app.domain.repository.DerivedDataRepository
+import com.onemind.app.domain.repository.SearchIndexRepository
 import io.mockk.mockk
 import org.junit.Assert.*
 import org.junit.Test
@@ -35,6 +37,7 @@ class ProcessingStageRegistryTest {
     private val generator: EmbeddingGenerator = mockk()
     private val textGenerator: TextGenerator = mockk()
     private val derived: DerivedDataRepository = mockk()
+    private val searchIndex: SearchIndexRepository = mockk()
 
     private fun ocr() = OcrStage(recognizer, derived)
     private fun vision() = VisionStage(describer, derived)
@@ -42,12 +45,13 @@ class ProcessingStageRegistryTest {
     private fun embedding() = EmbeddingStage(generator, derived)
     private fun categorization() = CategorizationStage(textGenerator, derived)
     private fun summarization() = SummarizationStage(textGenerator, derived)
+    private fun indexing() = SearchIndexStage(searchIndex)
 
     private fun allStages() =
-        setOf(summarization(), categorization(), embedding(), metadata(), vision(), ocr())
+        setOf(indexing(), summarization(), categorization(), embedding(), metadata(), vision(), ocr())
 
     @Test
-    fun `stages run OCR then vision then metadata then embedding then categorization then summarization`() {
+    fun `stages run OCR then vision then metadata then embedding then categorization then summarization then indexing`() {
         val ordered = ProcessingStageRegistry(allStages()).all()
 
         assertEquals(
@@ -57,10 +61,19 @@ class ProcessingStageRegistryTest {
                 StageId.METADATA,
                 StageId.EMBEDDING,
                 StageId.CATEGORIZATION,
-                StageId.SUMMARIZATION
+                StageId.SUMMARIZATION,
+                StageId.INDEXING
             ),
             ordered.map { it.id }
         )
+    }
+
+    @Test
+    fun `indexing runs last, since it indexes what every other stage produced`() {
+        // Anything ordered after it would be invisible to search.
+        val ordered = ProcessingStageRegistry(allStages()).all().map { it.id }
+
+        assertEquals(ordered.size - 1, ordered.indexOf(StageId.INDEXING))
     }
 
     @Test
@@ -80,19 +93,24 @@ class ProcessingStageRegistryTest {
     }
 
     @Test
-    fun `summarization runs last, since it reads what every other stage produced`() {
+    fun `summarization runs after every stage whose output it reads`() {
+        // It is no longer last — indexing follows it — so the meaningful assertion
+        // is its position relative to the stages it actually consumes, not the end
+        // of the list.
         val ordered = ProcessingStageRegistry(allStages()).all().map { it.id }
 
-        assertEquals(ordered.size - 1, ordered.indexOf(StageId.SUMMARIZATION))
+        assertTrue(ordered.indexOf(StageId.SUMMARIZATION) > ordered.indexOf(StageId.OCR))
+        assertTrue(ordered.indexOf(StageId.SUMMARIZATION) > ordered.indexOf(StageId.VISION))
+        assertTrue(ordered.indexOf(StageId.SUMMARIZATION) > ordered.indexOf(StageId.METADATA))
     }
 
     @Test
     fun `order does not depend on the order stages were bound`() {
         val oneWay = ProcessingStageRegistry(
-            setOf(ocr(), vision(), metadata(), embedding(), categorization(), summarization())
+            setOf(ocr(), vision(), metadata(), embedding(), categorization(), summarization(), indexing())
         ).all().map { it.id }
         val otherWay = ProcessingStageRegistry(
-            setOf(summarization(), categorization(), embedding(), metadata(), vision(), ocr())
+            setOf(indexing(), summarization(), categorization(), embedding(), metadata(), vision(), ocr())
         ).all().map { it.id }
 
         assertEquals(oneWay, otherWay)
@@ -100,7 +118,7 @@ class ProcessingStageRegistryTest {
 
     @Test
     fun `every registered stage is returned`() {
-        assertEquals(6, ProcessingStageRegistry(allStages()).all().size)
+        assertEquals(7, ProcessingStageRegistry(allStages()).all().size)
     }
 
     @Test

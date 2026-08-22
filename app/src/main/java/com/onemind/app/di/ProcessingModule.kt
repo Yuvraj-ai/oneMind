@@ -13,6 +13,7 @@ import com.onemind.app.domain.processing.stages.EmbeddingStage
 import com.onemind.app.domain.processing.stages.MetadataExtractionStage
 import com.onemind.app.domain.processing.stages.CategorizationStage
 import com.onemind.app.domain.processing.stages.OcrStage
+import com.onemind.app.domain.processing.stages.SearchIndexStage
 import com.onemind.app.domain.processing.stages.SummarizationStage
 import com.onemind.app.domain.processing.stages.VisionStage
 import dagger.Binds
@@ -62,6 +63,10 @@ abstract class ProcessingModule {
     @Binds
     @IntoSet
     abstract fun bindSummarizationStage(stage: SummarizationStage): ProcessingStage
+
+    @Binds
+    @IntoSet
+    abstract fun bindSearchIndexStage(stage: SearchIndexStage): ProcessingStage
 
     @Binds
     abstract fun bindTextRecognizer(impl: MlKitTextRecognizer): TextRecognizer

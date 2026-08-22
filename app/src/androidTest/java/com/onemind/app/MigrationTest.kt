@@ -281,4 +281,269 @@ class MigrationTest {
             assertEquals(CategoryDictionary.ALL.size, c.getInt(0))
         }
     }
+
+    // --- v3 -> v4: the search index ---------------------------------------
+
+    /** Seed a v3 database with one enriched Memory. */
+    private fun seedV3WithEnrichedMemory() {
+        helper.createDatabase(TEST_DB, 3).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO memories (id, createdAt, updatedAt, sourceType, processingState, sourcePackage)
+                VALUES (5, 1700000000000, 1700000000000, 'SHARE', 'READY', 'com.android.chrome')
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO content_blocks (id, memoryId, position, type, content, thumbnailPath, metadata)
+                VALUES (1, 5, 0, 'TEXT', 'Notes on tonkotsu ramen', NULL, NULL)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO memory_summaries (memoryId, summaryText, status, generatedAt, providerModel)
+                VALUES (5, 'A ramen recipe collection.', 'SUCCESS', 1700000000001, 'gpt-4o-mini')
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO ocr_results (id, memoryId, contentBlockId, status, extractedText, processedAt)
+                VALUES (1, 5, 1, 'SUCCESS', 'Simmer for twelve hours', 1700000000002)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO vision_results (id, memoryId, contentBlockId, status, description, providerModel, processedAt)
+                VALUES (1, 5, 1, 'SUCCESS', 'A bowl of noodle soup', 'gpt-4o-mini', 1700000000003)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO extracted_entities (id, memoryId, name, entityType, confidence, source)
+                VALUES (1, 5, 'Tokyo', 'PLACE', NULL, 'USER_TEXT')
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO extracted_urls (id, memoryId, rawUrl, normalizedUrl, domain)
+                VALUES (1, 5, 'https://seriouseats.com/ramen?utm_source=news', 'https://seriouseats.com/ramen', 'seriouseats.com')
+                """.trimIndent()
+            )
+        }
+    }
+
+    @Test
+    fun migrate3To4_preservesExistingMemoriesAndTheirDerivedData() {
+        seedV3WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        db.query("SELECT content FROM content_blocks WHERE memoryId = 5").use { c ->
+            assertTrue("the pre-existing Memory should still be there", c.moveToFirst())
+            assertEquals("Notes on tonkotsu ramen", c.getString(0))
+        }
+        db.query("SELECT summaryText FROM memory_summaries WHERE memoryId = 5").use { c ->
+            assertTrue("the existing summary should survive", c.moveToFirst())
+            assertEquals("A ramen recipe collection.", c.getString(0))
+        }
+    }
+
+    @Test
+    fun migrate3To4_backfillsTheIndexForExistingMemories() {
+        // Without the backfill, search would only ever find Memories saved after
+        // the upgrade — and a user's existing Memories are precisely the ones they
+        // have forgotten and most need to search.
+        seedV3WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        db.query("SELECT COUNT(*) FROM memory_search_index").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("the pre-existing Memory should be indexed", 1, c.getInt(0))
+        }
+    }
+
+    @Test
+    fun migrate3To4_backfillIncludesEveryTextSource() {
+        seedV3WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        val doc = db.query("SELECT searchableText FROM memory_search_index WHERE rowid = 5").use { c ->
+            assertTrue(c.moveToFirst())
+            c.getString(0)
+        }
+
+        listOf(
+            "Notes on tonkotsu ramen",      // user text
+            "A ramen recipe collection.",   // summary
+            "Simmer for twelve hours",      // OCR
+            "A bowl of noodle soup",        // vision
+            "Tokyo",                        // entity
+            "seriouseats.com"               // URL domain
+        ).forEach { expected ->
+            assertTrue("backfill omitted '$expected' from: $doc", doc.contains(expected))
+        }
+    }
+
+    @Test
+    fun migrate3To4_backfillIndexesDomainsRatherThanWholeUrls() {
+        // Matching the Kotlin builder: a full URL brings tracking parameters that
+        // would match queries by accident.
+        seedV3WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        val doc = db.query("SELECT searchableText FROM memory_search_index WHERE rowid = 5").use { c ->
+            c.moveToFirst()
+            c.getString(0)
+        }
+
+        assertTrue(doc.contains("seriouseats.com"))
+        assertFalse("tracking parameters must not be indexed", doc.contains("utm_source"))
+    }
+
+    @Test
+    fun migrate3To4_theIndexIsSearchable() {
+        // Proves the FTS table works, not merely that it exists.
+        seedV3WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        db.query(
+            "SELECT rowid FROM memory_search_index WHERE memory_search_index MATCH 'tonkotsu'"
+        ).use { c ->
+            assertTrue("MATCH should find the backfilled Memory", c.moveToFirst())
+            assertEquals(5L, c.getLong(0))
+        }
+    }
+
+    @Test
+    fun migrate3To4_findsAMemoryByItsSummaryAlone() {
+        // The summary is the highest-value field for the vague queries this app
+        // exists to serve, so it must be searchable on its own.
+        seedV3WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        db.query(
+            "SELECT rowid FROM memory_search_index WHERE memory_search_index MATCH 'collection'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+        }
+    }
+
+    @Test
+    fun migrate3To4_aMemoryWithNoTextIsNotIndexed() {
+        // An unprocessed image-only Memory has nothing to find it by, and an empty
+        // index row would make COUNT(*) a lie about how much is searchable.
+        helper.createDatabase(TEST_DB, 3).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO memories (id, createdAt, updatedAt, sourceType, processingState, sourcePackage)
+                VALUES (9, 1, 1, 'SCREENSHOT', 'SAVED', NULL)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO content_blocks (id, memoryId, position, type, content, thumbnailPath, metadata)
+                VALUES (1, 9, 0, 'IMAGE', '/img/9.webp', NULL, NULL)
+                """.trimIndent()
+            )
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        db.query("SELECT COUNT(*) FROM memory_search_index").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(0, c.getInt(0))
+        }
+    }
+
+    @Test
+    fun migrate3To4_excludesFailedDerivedData() {
+        // Matching the Kotlin builder: a FAILED OCR result holds no usable text.
+        helper.createDatabase(TEST_DB, 3).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO memories (id, createdAt, updatedAt, sourceType, processingState, sourcePackage)
+                VALUES (11, 1, 1, 'MANUAL', 'READY', NULL)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO content_blocks (id, memoryId, position, type, content, thumbnailPath, metadata)
+                VALUES (1, 11, 0, 'TEXT', 'real content', NULL, NULL)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO ocr_results (id, memoryId, contentBlockId, status, extractedText, processedAt)
+                VALUES (1, 11, 1, 'FAILED', 'garbage that should not be indexed', 1)
+                """.trimIndent()
+            )
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        val doc = db.query("SELECT searchableText FROM memory_search_index WHERE rowid = 11").use { c ->
+            c.moveToFirst()
+            c.getString(0)
+        }
+
+        assertTrue(doc.contains("real content"))
+        assertFalse(doc.contains("garbage"))
+    }
+
+    @Test
+    fun migrate1To4_worksAsOneUpgradeForSomeoneOnTheOriginalRelease() {
+        // Someone who has not opened the app since v1 upgrades straight to v4.
+        // Room chains all three migrations, and the Memory must survive every one.
+        helper.createDatabase(TEST_DB, 1).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO memories (id, createdAt, updatedAt, sourceType, processingState, sourcePackage)
+                VALUES (3, 1700000000000, 1700000000000, 'SHARE', 'READY', 'com.android.chrome')
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO content_blocks (id, memoryId, position, type, content, thumbnailPath, metadata)
+                VALUES (1, 3, 0, 'TEXT', 'An article about quantization', NULL, NULL)
+                """.trimIndent()
+            )
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, *Migrations.ALL)
+
+        db.query("SELECT content FROM content_blocks WHERE memoryId = 3").use { c ->
+            assertTrue("the v1 Memory should survive three migrations", c.moveToFirst())
+            assertEquals("An article about quantization", c.getString(0))
+        }
+        // Categories seeded by 2->3 and the index built by 3->4 should both be there.
+        db.query("SELECT COUNT(*) FROM categories").use { c ->
+            c.moveToFirst()
+            assertEquals(CategoryDictionary.ALL.size, c.getInt(0))
+        }
+        db.query(
+            "SELECT rowid FROM memory_search_index WHERE memory_search_index MATCH 'quantization'"
+        ).use { c ->
+            assertTrue("a v1 Memory should be searchable after upgrading to v4", c.moveToFirst())
+        }
+    }
+
+    @Test
+    fun migrate3To4_thenOpeningWithRoomWorks() = runCatching {
+        helper.createDatabase(TEST_DB, 3).close()
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+
+        val room = Room.databaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            OneMindDatabase::class.java,
+            TEST_DB
+        ).addMigrations(*Migrations.ALL).build()
+
+        room.openHelper.writableDatabase
+        room.close()
+    }.getOrThrow()
 }

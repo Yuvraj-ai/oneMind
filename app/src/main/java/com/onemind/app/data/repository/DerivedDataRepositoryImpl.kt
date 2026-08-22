@@ -2,6 +2,7 @@ package com.onemind.app.data.repository
 
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
+import com.onemind.app.data.local.dao.SearchIndexDao
 import com.onemind.app.data.local.entity.CategoryMapper.toDomain
 import com.onemind.app.data.local.entity.CategoryMapper.toEntity
 import com.onemind.app.data.local.entity.DerivedMapper.toDomain
@@ -14,7 +15,8 @@ import javax.inject.Singleton
 @Singleton
 class DerivedDataRepositoryImpl @Inject constructor(
     private val dao: DerivedDataDao,
-    private val categoryDao: CategoryDao
+    private val categoryDao: CategoryDao,
+    private val searchIndexDao: SearchIndexDao
 ) : DerivedDataRepository {
 
     override suspend fun getDerivedData(memoryId: Long): DerivedData {
@@ -83,6 +85,9 @@ class DerivedDataRepositoryImpl @Inject constructor(
         // stays. Clearing it here would empty the dictionary on any edit.
         categoryDao.deleteAssignments(memoryId)
         categoryDao.deleteCategorization(memoryId)
+        // The search index is a copy of text that just became stale. Leaving it
+        // would let a query match content the Memory no longer has.
+        searchIndexDao.delete(memoryId)
     }
 
     override suspend fun getAllCategories(): List<Category> =

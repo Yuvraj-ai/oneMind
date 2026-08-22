@@ -2,8 +2,10 @@ package com.onemind.app.di
 
 import com.onemind.app.data.repository.DerivedDataRepositoryImpl
 import com.onemind.app.data.repository.MemoryRepositoryImpl
+import com.onemind.app.data.repository.SearchIndexRepositoryImpl
 import com.onemind.app.domain.repository.DerivedDataRepository
 import com.onemind.app.domain.repository.MemoryRepository
+import com.onemind.app.domain.repository.SearchIndexRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,4 +27,10 @@ abstract class RepositoryModule {
     abstract fun bindDerivedDataRepository(
         impl: DerivedDataRepositoryImpl
     ): DerivedDataRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSearchIndexRepository(
+        impl: SearchIndexRepositoryImpl
+    ): SearchIndexRepository
 }

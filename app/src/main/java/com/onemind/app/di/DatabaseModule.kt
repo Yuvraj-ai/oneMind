@@ -10,6 +10,7 @@ import com.onemind.app.data.local.OneMindDatabase
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
+import com.onemind.app.data.local.dao.SearchIndexDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -54,5 +55,10 @@ object DatabaseModule {
     @Provides
     fun provideCategoryDao(database: OneMindDatabase): CategoryDao {
         return database.categoryDao()
+    }
+
+    @Provides
+    fun provideSearchIndexDao(database: OneMindDatabase): SearchIndexDao {
+        return database.searchIndexDao()
     }
 }

@@ -202,5 +202,96 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    /**
+     * v3 -> v4: add the full-text search index, and backfill it.
+     *
+     * Additive in schema terms, but the backfill is the point. Without it, search
+     * would only find Memories saved after the upgrade, and a user with two years
+     * of history would type a query, get nothing, and reasonably conclude the
+     * feature is broken. Their existing Memories are exactly the ones they have
+     * forgotten and most need to search.
+     *
+     * The backfill assembles the same document [com.onemind.app.domain.search.SearchDocument]
+     * would, in SQL. That duplication is unfortunate and deliberate: running the
+     * Kotlin builder here would mean loading every Memory and its derived data
+     * through Room during a migration, which cannot use the DAOs of a database
+     * that is still being migrated. The two are kept honest by a test that indexes
+     * the same Memory both ways and compares.
+     *
+     * Only SUCCESS-status rows are included, matching the builder. `group_concat`
+     * is fed pre-filtered rows so a FAILED OCR result contributes nothing rather
+     * than an empty line.
+     */
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // FTS4 virtual table. `content=""` is not used: this is a standalone
+            // index, because its document is assembled from six tables and Room's
+            // external-content mode binds to exactly one.
+            db.execSQL(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS `memory_search_index`
+                USING fts4(`searchableText` TEXT NOT NULL)
+                """.trimIndent()
+            )
+
+            // Backfill. Built as a union of non-empty parts rather than a chain of
+            // COALESCE concatenations, for a reason worth recording: with the
+            // concatenation form, a Memory with nothing to index produces a string
+            // of bare separators rather than an empty one, and SQLite's TRIM strips
+            // only spaces by default — not newlines — so the emptiness check
+            // silently fails and an empty row gets written. Selecting only non-empty
+            // parts and grouping makes that class of mistake unrepresentable: a
+            // Memory with no parts forms no group, so it gets no row at all.
+            //
+            // `sortKey` keeps section order fixed so the same data always yields the
+            // same document, which matters only for reproducibility, not search.
+            db.execSQL(
+                """
+                INSERT INTO `memory_search_index` (`rowid`, `searchableText`)
+                SELECT memoryId, group_concat(part, char(10))
+                FROM (
+                    SELECT memoryId, 1 AS sortKey, content AS part
+                    FROM content_blocks
+                    WHERE type = 'TEXT' AND TRIM(content) <> ''
+
+                    UNION ALL
+                    SELECT memoryId, 2, summaryText
+                    FROM memory_summaries
+                    WHERE status = 'SUCCESS' AND TRIM(summaryText) <> ''
+
+                    UNION ALL
+                    SELECT memoryId, 3, extractedText
+                    FROM ocr_results
+                    WHERE status = 'SUCCESS' AND TRIM(extractedText) <> ''
+
+                    UNION ALL
+                    SELECT memoryId, 4, description
+                    FROM vision_results
+                    WHERE status = 'SUCCESS' AND TRIM(description) <> ''
+
+                    UNION ALL
+                    SELECT memoryId, 5, name
+                    FROM extracted_entities
+                    WHERE TRIM(name) <> ''
+
+                    UNION ALL
+                    SELECT DISTINCT memoryId, 6, domain
+                    FROM extracted_urls
+                    WHERE TRIM(domain) <> ''
+
+                    UNION ALL
+                    SELECT mc.memoryId, 7, c.name
+                    FROM categories c
+                    JOIN memory_categories mc ON mc.categoryId = c.id
+                    WHERE TRIM(c.name) <> ''
+
+                    ORDER BY memoryId, sortKey
+                )
+                GROUP BY memoryId
+                """.trimIndent()
+            )
+        }
+    }
+
+    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 }
