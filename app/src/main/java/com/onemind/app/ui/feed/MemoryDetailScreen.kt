@@ -126,6 +126,8 @@ private fun MemoryDetailContent(
         // needs when scanning. Falls back to raw content when absent.
         SummarySection(memory = memory)
 
+        CategoryChips(categories = memory.derived.categories)
+
         // Content blocks
         memory.contentBlocks.sortedBy { it.position }.forEach { block ->
             ContentBlockView(block = block)

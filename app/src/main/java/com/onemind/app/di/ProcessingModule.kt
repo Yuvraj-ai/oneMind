@@ -11,6 +11,7 @@ import com.onemind.app.domain.processing.TextGenerator
 import com.onemind.app.domain.processing.TextRecognizer
 import com.onemind.app.domain.processing.stages.EmbeddingStage
 import com.onemind.app.domain.processing.stages.MetadataExtractionStage
+import com.onemind.app.domain.processing.stages.CategorizationStage
 import com.onemind.app.domain.processing.stages.OcrStage
 import com.onemind.app.domain.processing.stages.SummarizationStage
 import com.onemind.app.domain.processing.stages.VisionStage
@@ -53,6 +54,10 @@ abstract class ProcessingModule {
     abstract fun bindMetadataExtractionStage(
         stage: MetadataExtractionStage
     ): ProcessingStage
+
+    @Binds
+    @IntoSet
+    abstract fun bindCategorizationStage(stage: CategorizationStage): ProcessingStage
 
     @Binds
     @IntoSet

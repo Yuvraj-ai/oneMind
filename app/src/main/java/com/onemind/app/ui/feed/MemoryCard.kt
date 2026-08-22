@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.onemind.app.domain.model.Category
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
@@ -90,6 +91,11 @@ fun MemoryCard(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
+                // Category chips, between the snippet and the timestamp: they
+                // qualify what the Memory is, so they read with the content
+                // rather than with its metadata.
+                CategoryChips(categories = memory.derived.categories)
+
                 // Timestamp
                 Text(
                     text = formatTimestamp(memory.createdAt),
@@ -100,6 +106,47 @@ fun MemoryCard(
                 ProcessingStatusRow(
                     state = memory.processingState,
                     onRetry = onRetryProcessing
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Category chips.
+ *
+ * Shared by the feed card and the detail view so both render the vocabulary
+ * identically — a category that reads one way in a list and another way on a
+ * detail screen is not recognisably the same category.
+ *
+ * Wraps rather than scrolls horizontally: a card is not a place to hide content
+ * behind a gesture the user has no reason to suspect is available.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CategoryChips(
+    categories: List<Category>,
+    modifier: Modifier = Modifier
+) {
+    if (categories.isEmpty()) return
+
+    FlowRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        categories.forEach { category ->
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Text(
+                    text = category.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                 )
             }
         }

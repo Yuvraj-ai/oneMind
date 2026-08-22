@@ -137,5 +137,70 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(MIGRATION_1_2)
+    /**
+     * v2 -> v3: add the category vocabulary and its join to Memories.
+     *
+     * Additive again: no existing table is altered, so every Memory survives with
+     * its content and its existing enrichments intact. Newly-created Memories get
+     * categories from the pipeline; older ones stay uncategorised until they are
+     * next processed, which is the same way they behaved when derived data
+     * arrived in v2.
+     *
+     * The vocabulary is seeded here rather than left to first use, so the table is
+     * never briefly empty in a way that would let the categorization stage offer a
+     * model nothing to choose from.
+     */
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `categories` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `parentId` INTEGER
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_categories_name` ON `categories` (`name`)"
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `memory_categories` (
+                    `memoryId` INTEGER NOT NULL,
+                    `categoryId` INTEGER NOT NULL,
+                    PRIMARY KEY(`memoryId`, `categoryId`),
+                    FOREIGN KEY(`memoryId`) REFERENCES `memories`(`id`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(`categoryId`) REFERENCES `categories`(`id`)
+                        ON UPDATE NO ACTION ON DELETE RESTRICT
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_memory_categories_memoryId` ON `memory_categories` (`memoryId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_memory_categories_categoryId` ON `memory_categories` (`categoryId`)"
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `memory_categorization` (
+                    `memoryId` INTEGER PRIMARY KEY NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `processedAt` INTEGER NOT NULL,
+                    `providerModel` TEXT,
+                    FOREIGN KEY(`memoryId`) REFERENCES `memories`(`id`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+
+            CategorySeeder.seed(db)
+        }
+    }
+
+    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 }

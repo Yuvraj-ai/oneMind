@@ -6,6 +6,7 @@ import com.onemind.app.domain.processing.ProcessingStageRegistry
 import com.onemind.app.domain.processing.StageId
 import com.onemind.app.domain.processing.TextGenerator
 import com.onemind.app.domain.processing.TextRecognizer
+import com.onemind.app.domain.processing.stages.CategorizationStage
 import com.onemind.app.domain.processing.stages.EmbeddingStage
 import com.onemind.app.domain.processing.stages.MetadataExtractionStage
 import com.onemind.app.domain.processing.stages.OcrStage
@@ -39,13 +40,14 @@ class ProcessingStageRegistryTest {
     private fun vision() = VisionStage(describer, derived)
     private fun metadata() = MetadataExtractionStage(textGenerator, derived)
     private fun embedding() = EmbeddingStage(generator, derived)
+    private fun categorization() = CategorizationStage(textGenerator, derived)
     private fun summarization() = SummarizationStage(textGenerator, derived)
 
     private fun allStages() =
-        setOf(summarization(), embedding(), metadata(), vision(), ocr())
+        setOf(summarization(), categorization(), embedding(), metadata(), vision(), ocr())
 
     @Test
-    fun `stages run OCR then vision then metadata then embedding then summarization`() {
+    fun `stages run OCR then vision then metadata then embedding then categorization then summarization`() {
         val ordered = ProcessingStageRegistry(allStages()).all()
 
         assertEquals(
@@ -54,6 +56,7 @@ class ProcessingStageRegistryTest {
                 StageId.VISION,
                 StageId.METADATA,
                 StageId.EMBEDDING,
+                StageId.CATEGORIZATION,
                 StageId.SUMMARIZATION
             ),
             ordered.map { it.id }
@@ -86,10 +89,10 @@ class ProcessingStageRegistryTest {
     @Test
     fun `order does not depend on the order stages were bound`() {
         val oneWay = ProcessingStageRegistry(
-            setOf(ocr(), vision(), metadata(), embedding(), summarization())
+            setOf(ocr(), vision(), metadata(), embedding(), categorization(), summarization())
         ).all().map { it.id }
         val otherWay = ProcessingStageRegistry(
-            setOf(summarization(), embedding(), metadata(), vision(), ocr())
+            setOf(summarization(), categorization(), embedding(), metadata(), vision(), ocr())
         ).all().map { it.id }
 
         assertEquals(oneWay, otherWay)
@@ -97,7 +100,15 @@ class ProcessingStageRegistryTest {
 
     @Test
     fun `every registered stage is returned`() {
-        assertEquals(5, ProcessingStageRegistry(allStages()).all().size)
+        assertEquals(6, ProcessingStageRegistry(allStages()).all().size)
+    }
+
+    @Test
+    fun `categorization runs after OCR and vision, whose text it reads`() {
+        val ordered = ProcessingStageRegistry(allStages()).all().map { it.id }
+
+        assertTrue(ordered.indexOf(StageId.CATEGORIZATION) > ordered.indexOf(StageId.OCR))
+        assertTrue(ordered.indexOf(StageId.CATEGORIZATION) > ordered.indexOf(StageId.VISION))
     }
 
     @Test

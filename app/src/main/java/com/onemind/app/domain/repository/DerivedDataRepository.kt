@@ -32,6 +32,29 @@ interface DerivedDataRepository {
     suspend fun saveSummary(summary: MemorySummary)
 
     /**
+     * The whole category vocabulary.
+     *
+     * There is no matching write. The vocabulary is seeded and immutable at
+     * runtime, which is what makes it a *controlled* vocabulary rather than a set
+     * of labels a model can grow.
+     */
+    suspend fun getAllCategories(): List<Category>
+
+    /**
+     * Replace a Memory's category assignments.
+     *
+     * Ids must come from [getAllCategories]. A foreign key makes an unknown id a
+     * failure at the storage layer rather than a silently orphaned row.
+     */
+    suspend fun saveCategories(memoryId: Long, categoryIds: List<Long>)
+
+    /** Records how categorization went, including that no provider was available. */
+    suspend fun saveCategorizationResult(result: CategorizationResult)
+
+    /** Categories for several Memories in one query, for the feed. */
+    suspend fun getCategoriesFor(memoryIds: List<Long>): Map<Long, List<Category>>
+
+    /**
      * Replaces any existing embedding for the Memory, so re-embedding can never
      * leave two active vectors behind.
      */
@@ -47,6 +70,9 @@ interface DerivedDataRepository {
      *
      * Called when source content changes: the old inferences describe text that
      * no longer exists.
+     *
+     * Clears category *assignments* but never the vocabulary itself, which the
+     * application owns and no Memory's edit may touch.
      */
     suspend fun clearDerivedData(memoryId: Long)
 }

@@ -25,7 +25,19 @@ data class DerivedData(
     val urls: List<ExtractedUrl> = emptyList(),
     val dates: List<ExtractedDate> = emptyList(),
     val entities: List<ExtractedEntity> = emptyList(),
-    val summary: MemorySummary? = null
+    val summary: MemorySummary? = null,
+
+    /**
+     * Categories assigned from the controlled vocabulary.
+     *
+     * Always a subset of the dictionary. A model can never add to it.
+     */
+    val categories: List<Category> = emptyList(),
+
+    /**
+     * How categorization went, which an empty [categories] cannot say by itself.
+     */
+    val categorization: CategorizationResult? = null
 ) {
     /** All text a later stage can read: OCR output plus image descriptions. */
     fun derivedText(): List<Pair<DerivedSource, String>> = buildList {
@@ -112,6 +124,20 @@ data class MemorySummary(
     val status: StageStatus = StageStatus.SUCCESS,
     val generatedAt: Instant = Instant.now(),
     val providerModel: String? = null
+)
+
+/**
+ * How categorization went for a Memory.
+ *
+ * Needed because zero categories is a legitimate answer — a Memory genuinely may
+ * fit nothing in the vocabulary — and is indistinguishable from "never ran"
+ * without this.
+ */
+data class CategorizationResult(
+    val memoryId: Long,
+    val status: StageStatus,
+    val providerModel: String? = null,
+    val processedAt: Instant = Instant.now()
 )
 
 /**

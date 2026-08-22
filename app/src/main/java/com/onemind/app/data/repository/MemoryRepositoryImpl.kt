@@ -1,10 +1,13 @@
 package com.onemind.app.data.repository
 
+import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
+import com.onemind.app.data.local.entity.CategoryMapper
 import com.onemind.app.data.local.entity.DerivedMapper
 import com.onemind.app.data.local.entity.EntityMapper.toDomain
 import com.onemind.app.data.local.entity.EntityMapper.toEntity
+import com.onemind.app.domain.model.Category
 import com.onemind.app.domain.model.DerivedData
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
@@ -19,27 +22,44 @@ import javax.inject.Singleton
 @Singleton
 class MemoryRepositoryImpl @Inject constructor(
     private val memoryDao: MemoryDao,
-    private val derivedDataDao: DerivedDataDao
+    private val derivedDataDao: DerivedDataDao,
+    private val categoryDao: CategoryDao
 ) : MemoryRepository {
 
     /**
-     * Feed stream. Carries the summary but not the rest of the derived data:
-     * cards show a summary, and loading OCR text and entity lists for every row
-     * would be paid on every scroll for data nothing on screen reads.
+     * Feed stream. Carries the summary and categories but not the rest of the
+     * derived data: cards show those two, and loading OCR text and entity lists
+     * for every row would be paid on every scroll for data nothing on screen
+     * reads.
+     *
+     * Both extras are fetched in one batched query each, rather than per row,
+     * because a query per card is a cost the feed pays on every scroll.
      */
     override fun observeAllMemories(): Flow<List<Memory>> {
         return memoryDao.observeAllMemories().map { rows ->
             if (rows.isEmpty()) return@map emptyList()
 
-            val summaries = derivedDataDao
-                .getSummaries(rows.map { it.memory.id })
-                .associateBy { it.memoryId }
+            val ids = rows.map { it.memory.id }
+            val summaries = derivedDataDao.getSummaries(ids).associateBy { it.memoryId }
+            val categories = categoryDao.getCategoriesForMemories(ids)
+                .groupBy { it.memoryId }
+                .mapValues { (_, catRows) ->
+                    catRows.map { Category(id = it.id, name = it.name, parentId = it.parentId) }
+                }
 
             rows.map { row ->
                 val memory = row.toDomain()
-                val summary = summaries[row.memory.id] ?: return@map memory
+                val summary = summaries[row.memory.id]
+                val memoryCategories = categories[row.memory.id].orEmpty()
+                if (summary == null && memoryCategories.isEmpty()) return@map memory
+
                 with(DerivedMapper) {
-                    memory.copy(derived = DerivedData(summary = summary.toDomain()))
+                    memory.copy(
+                        derived = DerivedData(
+                            summary = summary?.toDomain(),
+                            categories = memoryCategories
+                        )
+                    )
                 }
             }
         }
@@ -101,7 +121,13 @@ class MemoryRepositoryImpl @Inject constructor(
             urls = derivedDataDao.getUrls(memoryId).map { it.toDomain() },
             dates = derivedDataDao.getDates(memoryId).map { it.toDomain() },
             entities = derivedDataDao.getEntities(memoryId).map { it.toDomain() },
-            summary = derivedDataDao.getSummary(memoryId)?.toDomain()
+            summary = derivedDataDao.getSummary(memoryId)?.toDomain(),
+            categories = with(CategoryMapper) {
+                categoryDao.getCategoriesForMemory(memoryId).map { it.toDomain() }
+            },
+            categorization = with(CategoryMapper) {
+                categoryDao.getCategorization(memoryId)?.toDomain()
+            }
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.onemind.app
 
+import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.ContentBlockEntity
@@ -21,13 +22,15 @@ class MemoryRepositoryTest {
 
     private lateinit var memoryDao: MemoryDao
     private lateinit var derivedDataDao: DerivedDataDao
+    private lateinit var categoryDao: CategoryDao
     private lateinit var repository: MemoryRepositoryImpl
 
     @Before
     fun setup() {
         memoryDao = mockk(relaxed = true)
         derivedDataDao = mockk(relaxed = true)
-        repository = MemoryRepositoryImpl(memoryDao, derivedDataDao)
+        categoryDao = mockk(relaxed = true)
+        repository = MemoryRepositoryImpl(memoryDao, derivedDataDao, categoryDao)
     }
 
     @Test
