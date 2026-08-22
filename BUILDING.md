@@ -67,15 +67,40 @@ committed.
 ./gradlew testDebugUnitTest    # unit tests (JVM, no device)
 ./gradlew assembleDebug        # full debug APK; exercises Hilt's graph validation
 ./gradlew lintDebug            # Android lint
-./gradlew connectedDebugAndroidTest  # instrumented tests; needs a device/emulator
+
+./scripts/emulator.fish start        # boot the headless test emulator
+./gradlew connectedDebugAndroidTest  # instrumented tests (Room integration)
+./scripts/emulator.fish stop
 ```
 
 Run `assembleDebug` before trusting a change: `compileDebugKotlin` alone does not
 run Hilt's full dependency-graph check, so a broken DI wiring compiles but fails
 there.
 
-## Not yet verified
+## Emulator for instrumented tests
 
-Instrumented tests (`app/src/androidTest`, currently `MemoryDaoTest`) need a
-connected device or emulator and have not been run. No emulator image is
-installed.
+Instrumented tests (`app/src/androidTest`) need a device. Hardware acceleration
+is required or the emulator is unusably slow — check `/dev/kvm` is readable and
+writable by your user.
+
+One-time setup:
+
+```fish
+sdkmanager --install "emulator" "system-images;android-36;google_apis;x86_64"
+avdmanager create avd -n onemind_test \
+  -k "system-images;android-36;google_apis;x86_64" -d pixel_6
+```
+
+`google_apis` rather than `default`, because ML Kit (arriving with the OCR stage)
+can need Play Services.
+
+Then `./scripts/emulator.fish start`, which boots headless and blocks until
+`sys.boot_completed`. Gradle finds the device through adb on its own.
+
+## Current verification status
+
+| Suite | Count | Status |
+|---|---|---|
+| Unit (JVM) | 55 | passing |
+| Instrumented (emulator, API 36) | 7 | passing |
+| Lint | — | 0 errors |

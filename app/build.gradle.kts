@@ -42,6 +42,23 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        resources {
+            // mockk-android pulls in JUnit 5 transitively, and several of those
+            // jars each ship their own META-INF licence files, which collide when
+            // merged into the test APK.
+            excludes += setOf(
+                "META-INF/LICENSE.md",
+                "META-INF/LICENSE-notice.md",
+                "META-INF/LICENSE",
+                "META-INF/NOTICE.md",
+                "META-INF/NOTICE",
+                "META-INF/AL2.0",
+                "META-INF/LGPL2.1"
+            )
+        }
+    }
 }
 
 /**
