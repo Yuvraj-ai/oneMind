@@ -122,6 +122,10 @@ private fun MemoryDetailContent(
 
         Spacer(modifier = Modifier.height(4.dp))
 
+        // Summary first: it says what the Memory is about, which is what the user
+        // needs when scanning. Falls back to raw content when absent.
+        SummarySection(memory = memory)
+
         // Content blocks
         memory.contentBlocks.sortedBy { it.position }.forEach { block ->
             ContentBlockView(block = block)
@@ -205,6 +209,34 @@ private fun ExtractedMetadataSection(memory: Memory) {
                     label = {
                         Text(entity.name, style = MaterialTheme.typography.labelSmall)
                     }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummarySection(memory: Memory) {
+    val summary = memory.derived.summary ?: return
+    if (summary.status != StageStatus.SUCCESS || summary.summaryText.isBlank()) return
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = summary.summaryText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            summary.providerModel?.let { model ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "summarised by $model",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
         }

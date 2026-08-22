@@ -18,6 +18,7 @@ import coil.request.ImageRequest
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
+import com.onemind.app.domain.processing.StageStatus
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -159,9 +160,18 @@ private fun ProcessingStatusRow(
 
 /**
  * Extract a text snippet from the memory's content blocks.
- * Prioritizes TEXT blocks, falls back to URL content.
+ *
+ * Prefers the pipeline's summary, which says what the Memory is *about* and is
+ * far more use at a glance than its opening words. Falls back to raw content when
+ * there is no summary — not processed yet, no provider configured, or nothing
+ * worth summarising.
  */
 private fun getTextSnippet(memory: Memory): String {
+    val summary = memory.derived.summary
+    if (summary?.status == StageStatus.SUCCESS && summary.summaryText.isNotBlank()) {
+        return summary.summaryText
+    }
+
     val textBlock = memory.contentBlocks.firstOrNull { it.type == ContentType.TEXT }
     if (textBlock != null) return textBlock.content
 

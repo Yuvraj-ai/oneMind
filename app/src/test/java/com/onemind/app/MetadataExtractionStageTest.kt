@@ -1,6 +1,7 @@
 package com.onemind.app
 
 import com.onemind.app.domain.model.*
+import com.onemind.app.domain.processing.BoundedAnalysisInput
 import com.onemind.app.domain.processing.StageId
 import com.onemind.app.domain.processing.StageResult
 import com.onemind.app.domain.processing.StageStatus
@@ -317,9 +318,11 @@ class MetadataExtractionStageTest {
 
         stage.process(memory(text = long))
 
+        // Shares the cap with every other model call rather than keeping a private
+        // one that could drift out of step.
         assertTrue(
             "prompt was ${promptSlot.captured.length} chars",
-            promptSlot.captured.length < MetadataExtractionStage.MAX_INPUT_CHARS + 1_000
+            promptSlot.captured.length < BoundedAnalysisInput.MAX_TEXT_CHARS + 1_000
         )
     }
 

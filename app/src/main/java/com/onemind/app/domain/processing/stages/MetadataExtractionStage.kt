@@ -135,11 +135,10 @@ class MetadataExtractionStage @Inject constructor(
             ?: DerivedSource.USER_TEXT
 
     private fun buildPrompt(text: String): String {
-        val bounded = if (text.length > MAX_INPUT_CHARS) {
-            text.take(MAX_INPUT_CHARS)
-        } else {
-            text
-        }
+        // Shares the cap with every other model call rather than keeping a private
+        // one that could drift. This stage runs before links are stored, so it
+        // bounds plain text rather than building a full BoundedAnalysisInput.
+        val bounded = BoundedAnalysisInput.boundText(text)
 
         return """
             Extract structured metadata from the text below.
@@ -166,16 +165,6 @@ class MetadataExtractionStage @Inject constructor(
     }
 
     companion object {
-        /**
-         * Cap on the text handed to the model.
-         *
-         * A Memory can hold a great deal of pasted content, and metadata
-         * extraction is not improved by feeding all of it. #15 formalises this as
-         * the Bounded AI-Analysis Input; this is the same instinct applied
-         * locally.
-         */
-        const val MAX_INPUT_CHARS = 4_000
-
         /** Enough for a substantial entity list without inviting rambling. */
         const val MAX_RESPONSE_TOKENS = 1_024
     }

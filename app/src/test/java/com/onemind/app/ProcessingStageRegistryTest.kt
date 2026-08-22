@@ -9,6 +9,7 @@ import com.onemind.app.domain.processing.TextRecognizer
 import com.onemind.app.domain.processing.stages.EmbeddingStage
 import com.onemind.app.domain.processing.stages.MetadataExtractionStage
 import com.onemind.app.domain.processing.stages.OcrStage
+import com.onemind.app.domain.processing.stages.SummarizationStage
 import com.onemind.app.domain.processing.stages.VisionStage
 import com.onemind.app.domain.repository.DerivedDataRepository
 import io.mockk.mockk
@@ -22,8 +23,9 @@ import org.junit.Test
  * Worth its own test because the ordering is implicit: it comes from the
  * declaration order of [StageId], not from anything visible at the call site, and
  * the dependencies between stages are real. Metadata extraction reads OCR text
- * and image descriptions; embedding reads all three. Get the order wrong and each
- * stage silently sees less than it should.
+ * and image descriptions; embedding reads all three; summarization reads
+ * everything before it. Get the order wrong and each stage silently sees less
+ * than it should.
  */
 class ProcessingStageRegistryTest {
 
@@ -37,15 +39,23 @@ class ProcessingStageRegistryTest {
     private fun vision() = VisionStage(describer, derived)
     private fun metadata() = MetadataExtractionStage(textGenerator, derived)
     private fun embedding() = EmbeddingStage(generator, derived)
+    private fun summarization() = SummarizationStage(textGenerator, derived)
 
-    private fun allStages() = setOf(embedding(), metadata(), vision(), ocr())
+    private fun allStages() =
+        setOf(summarization(), embedding(), metadata(), vision(), ocr())
 
     @Test
-    fun `stages run OCR then vision then metadata then embedding`() {
+    fun `stages run OCR then vision then metadata then embedding then summarization`() {
         val ordered = ProcessingStageRegistry(allStages()).all()
 
         assertEquals(
-            listOf(StageId.OCR, StageId.VISION, StageId.METADATA, StageId.EMBEDDING),
+            listOf(
+                StageId.OCR,
+                StageId.VISION,
+                StageId.METADATA,
+                StageId.EMBEDDING,
+                StageId.SUMMARIZATION
+            ),
             ordered.map { it.id }
         )
     }
@@ -67,12 +77,19 @@ class ProcessingStageRegistryTest {
     }
 
     @Test
+    fun `summarization runs last, since it reads what every other stage produced`() {
+        val ordered = ProcessingStageRegistry(allStages()).all().map { it.id }
+
+        assertEquals(ordered.size - 1, ordered.indexOf(StageId.SUMMARIZATION))
+    }
+
+    @Test
     fun `order does not depend on the order stages were bound`() {
         val oneWay = ProcessingStageRegistry(
-            setOf(ocr(), vision(), metadata(), embedding())
+            setOf(ocr(), vision(), metadata(), embedding(), summarization())
         ).all().map { it.id }
         val otherWay = ProcessingStageRegistry(
-            setOf(embedding(), metadata(), vision(), ocr())
+            setOf(summarization(), embedding(), metadata(), vision(), ocr())
         ).all().map { it.id }
 
         assertEquals(oneWay, otherWay)
@@ -80,7 +97,7 @@ class ProcessingStageRegistryTest {
 
     @Test
     fun `every registered stage is returned`() {
-        assertEquals(4, ProcessingStageRegistry(allStages()).all().size)
+        assertEquals(5, ProcessingStageRegistry(allStages()).all().size)
     }
 
     @Test
