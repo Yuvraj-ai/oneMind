@@ -279,6 +279,18 @@ object Migrations {
                     FROM extracted_urls
                     WHERE TRIM(domain) <> ''
 
+                    -- The link's path as well as its host, because the locked
+                    -- product decisions list URLs among searchable things. The
+                    -- query string is cut off: `normalizedUrl` keeps it on purpose
+                    -- for identity, but for search it is only tracking parameters.
+                    UNION ALL
+                    SELECT DISTINCT memoryId, 6,
+                        CASE WHEN instr(normalizedUrl, '?') > 0
+                             THEN substr(normalizedUrl, 1, instr(normalizedUrl, '?') - 1)
+                             ELSE normalizedUrl END
+                    FROM extracted_urls
+                    WHERE TRIM(normalizedUrl) <> ''
+
                     UNION ALL
                     SELECT mc.memoryId, 7, c.name
                     FROM categories c

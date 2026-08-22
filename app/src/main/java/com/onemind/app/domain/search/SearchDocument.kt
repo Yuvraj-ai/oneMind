@@ -64,11 +64,23 @@ object SearchDocument {
             .filter { it.isNotEmpty() }
             .forEach(parts::add)
 
-        // Domains rather than whole URLs. A full URL contributes tracking
-        // parameters and path slugs that match queries by accident; "github.com"
-        // is the part a user would actually search for.
+        // Links. The locked product decisions list URLs among the things a user
+        // may search for, so the path is indexed and not only the host: someone
+        // looking for "seriouseats.com/ramen" should find it.
+        //
+        // The query string is dropped, which is the whole reason this is a third
+        // projection rather than reusing `normalizedUrl`. That field keeps the
+        // query deliberately, because it often carries a page's identity and
+        // dropping it would merge different links — but for search it contributes
+        // only tracking parameters and session ids, which match queries by
+        // accident and never on purpose.
+        //
+        // `domain` is indexed alongside it because it has `www.` stripped, and a
+        // query for "example.com" should find a link to "www.example.com".
         derived.urls
-            .map { it.domain.trim() }
+            .flatMap { url ->
+                listOf(url.domain.trim(), url.normalizedUrl.substringBefore('?').trim())
+            }
             .filter { it.isNotEmpty() }
             .distinct()
             .forEach(parts::add)

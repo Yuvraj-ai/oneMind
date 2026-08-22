@@ -22,6 +22,16 @@ interface MemoryDao {
     @Query("SELECT * FROM memories ORDER BY createdAt DESC")
     suspend fun getAllMemories(): List<MemoryWithBlocks>
 
+    /**
+     * Several Memories in one query, for hydrating search results.
+     *
+     * Returns them in no particular order — SQL `IN` makes no promise — so callers
+     * that care about ranking must reorder.
+     */
+    @Transaction
+    @Query("SELECT * FROM memories WHERE id IN (:ids)")
+    suspend fun getMemoriesByIds(ids: List<Long>): List<MemoryWithBlocks>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMemory(memory: MemoryEntity): Long
 

@@ -76,6 +76,42 @@ class MemoryRepositoryImpl @Inject constructor(
         return row.toDomain().copy(derived = loadDerivedData(id))
     }
 
+    override suspend fun getMemoriesByIds(ids: List<Long>): List<Memory> {
+        if (ids.isEmpty()) return emptyList()
+
+        val rows = memoryDao.getMemoriesByIds(ids)
+        if (rows.isEmpty()) return emptyList()
+
+        // Same two batched lookups the feed uses, for the same reason: results are
+        // rendered with the feed's card, and a query per row would cost on every
+        // keystroke rather than every scroll.
+        val presentIds = rows.map { it.memory.id }
+        val summaries = derivedDataDao.getSummaries(presentIds).associateBy { it.memoryId }
+        val categories = categoryDao.getCategoriesForMemories(presentIds)
+            .groupBy { it.memoryId }
+            .mapValues { (_, catRows) ->
+                catRows.map { Category(id = it.id, name = it.name, parentId = it.parentId) }
+            }
+
+        return rows.map { row ->
+            val memory = row.toDomain()
+            val summary = summaries[row.memory.id]
+            val memoryCategories = categories[row.memory.id].orEmpty()
+            if (summary == null && memoryCategories.isEmpty()) {
+                memory
+            } else {
+                with(DerivedMapper) {
+                    memory.copy(
+                        derived = DerivedData(
+                            summary = summary?.toDomain(),
+                            categories = memoryCategories
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     override suspend fun createMemory(memory: Memory): Long {
         val entity = memory.toEntity()
         val blockEntities = memory.contentBlocks.mapIndexed { index, block ->

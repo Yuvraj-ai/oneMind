@@ -16,8 +16,27 @@ data class FeedUiState(
     val availableSources: List<SourceFilterOption> = emptyList(),
 
     /** View mode (#22). FEED = flat list, TIMELINE = date-grouped. */
-    val viewMode: ViewMode = ViewMode.FEED
-)
+    val viewMode: ViewMode = ViewMode.FEED,
+
+    // --- search (#24) ------------------------------------------------------
+
+    /** Exactly what the user typed. */
+    val searchQuery: String = "",
+
+    /** Matches for [searchQuery], best first. Meaningless while [isSearching]. */
+    val searchResults: List<Memory> = emptyList(),
+
+    val isSearching: Boolean = false
+) {
+    /**
+     * True once the user has typed something usable.
+     *
+     * Drives which of two modes the screen is in: browsing their memories, or
+     * looking at search results. Derived rather than stored, so the two can never
+     * disagree.
+     */
+    val isSearchActive: Boolean get() = searchQuery.isNotBlank()
+}
 
 /**
  * A selected source filter.

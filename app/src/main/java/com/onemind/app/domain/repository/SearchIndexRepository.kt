@@ -19,4 +19,24 @@ interface SearchIndexRepository {
 
     /** How many Memories are indexed. Used by the backfill and its tests. */
     suspend fun indexedCount(): Int
+
+    /**
+     * Memories matching an FTS expression, with their documents.
+     *
+     * [ftsExpression] must come from
+     * [com.onemind.app.domain.search.FtsQuery.build] — MATCH takes a grammar, and
+     * raw user text in it is a syntax error rather than a failed search.
+     */
+    suspend fun match(ftsExpression: String, limit: Int): List<IndexedDocument>
 }
+
+/**
+ * A Memory's indexed text, as returned by a search.
+ *
+ * Declared here rather than reusing the DAO's row type so the domain does not have
+ * to know that storage exists.
+ */
+data class IndexedDocument(
+    val memoryId: Long,
+    val searchableText: String
+)

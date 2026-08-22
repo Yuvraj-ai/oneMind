@@ -33,4 +33,32 @@ interface SearchIndexDao {
     /** Present for tests and the backfill's own verification. */
     @Query("SELECT searchableText FROM memory_search_index WHERE rowid = :memoryId")
     suspend fun getText(memoryId: Long): String?
+
+    /**
+     * Rows matching an FTS expression, with their documents.
+     *
+     * The document comes back alongside the id because relevance has to be
+     * computed from it — FTS4 has no BM25 to ask — and because #29 needs the text
+     * to build a matching snippet. Fetching it here avoids a second query per
+     * result.
+     *
+     * [ftsExpression] must come from [com.onemind.app.domain.search.FtsQuery.build],
+     * never from raw user input: MATCH takes a grammar, and unsanitised text in it
+     * is a syntax error rather than a failed search.
+     */
+    @Query(
+        """
+        SELECT rowid AS memoryId, searchableText
+        FROM memory_search_index
+        WHERE memory_search_index MATCH :ftsExpression
+        LIMIT :limit
+        """
+    )
+    suspend fun match(ftsExpression: String, limit: Int): List<SearchIndexRow>
 }
+
+/** A matching index row: which Memory, and the text that matched. */
+data class SearchIndexRow(
+    val memoryId: Long,
+    val searchableText: String
+)

@@ -2,6 +2,7 @@ package com.onemind.app.data.repository
 
 import com.onemind.app.data.local.dao.SearchIndexDao
 import com.onemind.app.data.local.entity.MemorySearchIndexEntity
+import com.onemind.app.domain.repository.IndexedDocument
 import com.onemind.app.domain.repository.SearchIndexRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,4 +21,9 @@ class SearchIndexRepositoryImpl @Inject constructor(
     }
 
     override suspend fun indexedCount(): Int = dao.count()
+
+    override suspend fun match(ftsExpression: String, limit: Int): List<IndexedDocument> =
+        dao.match(ftsExpression, limit).map {
+            IndexedDocument(memoryId = it.memoryId, searchableText = it.searchableText)
+        }
 }

@@ -387,9 +387,10 @@ class MigrationTest {
     }
 
     @Test
-    fun migrate3To4_backfillIndexesDomainsRatherThanWholeUrls() {
-        // Matching the Kotlin builder: a full URL brings tracking parameters that
-        // would match queries by accident.
+    fun migrate3To4_backfillIndexesUrlPathsButNotQueryStrings() {
+        // Matching the Kotlin builder: the path is searchable because the locked
+        // product decisions list URLs among searchable things, while the query
+        // string carries only tracking parameters.
         seedV3WithEnrichedMemory()
 
         val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
@@ -400,6 +401,7 @@ class MigrationTest {
         }
 
         assertTrue(doc.contains("seriouseats.com"))
+        assertTrue("the path should be searchable", doc.contains("ramen"))
         assertFalse("tracking parameters must not be indexed", doc.contains("utm_source"))
     }
 

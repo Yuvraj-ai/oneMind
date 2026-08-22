@@ -16,6 +16,14 @@ interface MemoryRepository {
     fun observeAllMemories(): Flow<List<Memory>>
 
     /**
+     * Several Memories at once, for hydrating search results.
+     *
+     * Carries the summary and categories, like the feed stream, since results are
+     * rendered with the same card. Order is unspecified; the caller reorders.
+     */
+    suspend fun getMemoriesByIds(ids: List<Long>): List<Memory>
+
+    /**
      * Get a single memory by ID. Returns null if not found.
      */
     suspend fun getMemoryById(id: Long): Memory?

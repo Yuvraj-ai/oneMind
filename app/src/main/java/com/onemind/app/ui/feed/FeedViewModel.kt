@@ -11,11 +11,18 @@ import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.model.SourceType
 import com.onemind.app.domain.repository.MemoryRepository
+import com.onemind.app.domain.search.FtsQuery
+import com.onemind.app.domain.search.KeywordSearcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,15 +33,89 @@ class FeedViewModel @Inject constructor(
     private val memoryDao: MemoryDao,
     private val imageFileStorage: ImageFileStorage,
     private val processingScheduler: ProcessingScheduler,
+    private val keywordSearcher: KeywordSearcher,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FeedUiState())
     val uiState: StateFlow<FeedUiState> = _uiState.asStateFlow()
 
+    /**
+     * Raw keystrokes, kept separate from [_uiState] so debouncing does not have to
+     * reason about unrelated state changes.
+     */
+    private val searchQueryFlow = MutableStateFlow("")
+
     init {
         observeMemories()
         loadSourceCounts()
+        observeSearchQuery()
+    }
+
+    /**
+     * Run a search a short pause after typing stops.
+     *
+     * `debounce` keeps a fast typist from issuing a query per keystroke;
+     * `flatMapLatest` cancels a search whose results are already obsolete, which
+     * matters because otherwise a slow early query can land after a fast later one
+     * and overwrite it with results for text the user has moved on from.
+     */
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    private fun observeSearchQuery() {
+        viewModelScope.launch {
+            searchQueryFlow
+                .debounce(SEARCH_DEBOUNCE_MS)
+                .flatMapLatest { query ->
+                    flow {
+                        if (FtsQuery.build(query) == null) {
+                            // Nothing usable typed — punctuation, or a single
+                            // character. Emit no results and let the feed show.
+                            emit(emptyList())
+                            return@flow
+                        }
+                        emit(searchMemories(query))
+                    }
+                }
+                .collect { results ->
+                    _uiState.update { it.copy(searchResults = results, isSearching = false) }
+                }
+        }
+    }
+
+    private suspend fun searchMemories(query: String): List<Memory> {
+        val matches = keywordSearcher.search(query)
+        if (matches.isEmpty()) return emptyList()
+
+        // Hydrate in one query, then restore the ranked order: SQL `IN` makes no
+        // promise about row order, so relying on it would silently discard the
+        // ranking that is the entire point of scoring.
+        val byId = memoryRepository
+            .getMemoriesByIds(matches.map { it.memoryId })
+            .associateBy { it.id }
+
+        return matches.mapNotNull { byId[it.memoryId] }
+    }
+
+    fun onSearchQueryChanged(query: String) {
+        _uiState.update {
+            it.copy(
+                searchQuery = query,
+                // Only claim to be searching when there is something to search for,
+                // so a stray keystroke does not flash a spinner.
+                isSearching = FtsQuery.build(query) != null,
+                // Drop stale results immediately rather than showing results for the
+                // previous query under the new one.
+                searchResults = if (query.isBlank()) emptyList() else it.searchResults
+            )
+        }
+        searchQueryFlow.value = query
+    }
+
+    fun clearSearch() {
+        _uiState.update {
+            it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false)
+        }
+        searchQueryFlow.value = ""
     }
 
     private fun observeMemories() {
@@ -139,5 +220,10 @@ class FeedViewModel @Inject constructor(
     fun retryProcessing(memory: Memory) {
         if (memory.processingState != ProcessingState.FAILED) return
         processingScheduler.enqueue(memory.id)
+    }
+
+    companion object {
+        /** Pause after the last keystroke before searching. */
+        private const val SEARCH_DEBOUNCE_MS = 300L
     }
 }

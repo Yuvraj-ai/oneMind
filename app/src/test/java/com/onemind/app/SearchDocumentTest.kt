@@ -132,31 +132,55 @@ class SearchDocumentTest {
             assertTrue("document omitted '$expected'", doc.contains(expected))
         }
     }
-
     // --- URLs are indexed by domain, not in full ---------------------------
 
     @Test
-    fun `URLs contribute their domain, not the whole link`() {
-        // A full URL brings tracking parameters and path slugs that match queries
-        // by accident. "github.com" is what a user would actually search for.
+    fun `URLs contribute their host and path, but never the query string`() {
+        // The locked product decisions list URLs among searchable things, so the
+        // path is indexed. The query string is not: it carries tracking parameters
+        // and session ids that match queries by accident and never on purpose.
         val doc = SearchDocument.build(
             memory(
                 derived = DerivedData(
                     urls = listOf(
                         ExtractedUrl(
                             memoryId = 1L,
-                            rawUrl = "https://github.com/a/b?utm_source=newsletter&ref=xyz123",
-                            normalizedUrl = "https://github.com/a/b",
-                            domain = "github.com"
+                            rawUrl = "https://seriouseats.com/ramen?utm_source=newsletter&ref=xyz123",
+                            normalizedUrl = "https://seriouseats.com/ramen?utm_source=newsletter&ref=xyz123",
+                            domain = "seriouseats.com"
                         )
                     )
                 )
             )
         )
 
-        assertTrue(doc.contains("github.com"))
+        assertTrue("host should be searchable", doc.contains("seriouseats.com"))
+        assertTrue("path should be searchable", doc.contains("ramen"))
         assertFalse("tracking parameters must not be indexed", doc.contains("utm_source"))
         assertFalse(doc.contains("xyz123"))
+        assertFalse(doc.contains("newsletter"))
+    }
+
+    @Test
+    fun `a www host is findable by its bare domain`() {
+        // `domain` is indexed alongside the normalised URL precisely because it has
+        // "www." stripped, and a query for "example.com" should find this.
+        val doc = SearchDocument.build(
+            memory(
+                derived = DerivedData(
+                    urls = listOf(
+                        ExtractedUrl(
+                            memoryId = 1L,
+                            rawUrl = "https://www.example.com/page",
+                            normalizedUrl = "https://www.example.com/page",
+                            domain = "example.com"
+                        )
+                    )
+                )
+            )
+        )
+
+        assertTrue(doc.split("\n").any { it == "example.com" })
     }
 
     @Test
@@ -178,7 +202,6 @@ class SearchDocumentTest {
 
         assertEquals(1, doc.split("\n").count { it == "github.com" })
     }
-
     // --- only successful derived data is indexed ---------------------------
 
     @Test
