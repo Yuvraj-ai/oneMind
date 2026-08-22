@@ -8,121 +8,139 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Hardcoded registry of approved local models.
- * 6 generative models (2x 1B, 2x 1.5B, 2x 2B) + 1 embedding model.
+ * The models oneMind can download.
  *
- * In future versions, this can be updated via a remote config mechanism.
+ * Every entry here is verified: the URL resolves unauthenticated, and the size is
+ * the real `content-length`. `ModelRegistryTest` asserts that, because the first
+ * version of this file was populated from recall and every single URL was wrong,
+ * while the tests passed by only ever checking that six entries existed.
+ *
+ * See `docs/research/2026-08-on-device-inference.md` for how each fact was
+ * established, and ADR-0002 for why there are no local generative models here.
  */
 @Singleton
 class ModelRegistry @Inject constructor() {
 
     /**
-     * All available generative models, sorted by parameter count.
+     * Local generative models: none, deliberately.
+     *
+     * There is no stable on-device LLM inference runtime for Android. Google has
+     * put the MediaPipe LLM Inference API into maintenance-only mode and points
+     * at LiteRT-LM, which is `0.0.0-alpha05`. Offering a 1.5GB download that then
+     * cannot run is worse than offering nothing, so generative enrichment comes
+     * from a cloud provider the user opts into. See ADR-0002.
+     *
+     * [candidateLocalModels] records what to reach for when this is revisited.
      */
-    val generativeModels: List<ModelInfo> = listOf(
-        // 1B models
-        ModelInfo(
-            id = "gemma3-1b-int4",
-            displayName = "Gemma 3 1B",
-            parameterCountB = 1.0f,
-            downloadSizeMb = 540,
-            downloadUrl = "https://huggingface.co/google/gemma-3-1b-it-int4/resolve/main/gemma-3-1b-it-int4.task",
-            quantizationFormat = "int4",
-            requiredRamMb = 2048,
-            capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.MEDIAPIPE
-        ),
-        ModelInfo(
-            id = "qwen3-0.6b-int4",
-            displayName = "Qwen 3 0.6B",
-            parameterCountB = 0.6f,
-            downloadSizeMb = 400,
-            downloadUrl = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/qwen3-0.6b-q4_k_m.gguf",
-            quantizationFormat = "int4",
-            requiredRamMb = 1536,
-            capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.GGUF
-        ),
-        // 1.5B models
-        ModelInfo(
-            id = "qwen3-1.7b-int4",
-            displayName = "Qwen 3 1.7B",
-            parameterCountB = 1.7f,
-            downloadSizeMb = 900,
-            downloadUrl = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/qwen3-1.7b-q4_k_m.gguf",
-            quantizationFormat = "int4",
-            requiredRamMb = 2560,
-            capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.GGUF
-        ),
-        ModelInfo(
-            id = "gemma3-1b-int8",
-            displayName = "Gemma 3 1B (int8)",
-            parameterCountB = 1.0f,
-            downloadSizeMb = 1080,
-            downloadUrl = "https://huggingface.co/google/gemma-3-1b-it-int8/resolve/main/gemma-3-1b-it-int8.task",
-            quantizationFormat = "int8",
-            requiredRamMb = 3072,
-            capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.MEDIAPIPE
-        ),
-        // 2B models
-        ModelInfo(
-            id = "gemma3-4b-int4",
-            displayName = "Gemma 3 4B (int4)",
-            parameterCountB = 4.0f,
-            downloadSizeMb = 2100,
-            downloadUrl = "https://huggingface.co/google/gemma-3-4b-it-int4/resolve/main/gemma-3-4b-it-int4.task",
-            quantizationFormat = "int4",
-            requiredRamMb = 4096,
-            capabilities = setOf(LlmCapability.TEXT_GENERATION, LlmCapability.VISION),
-            format = ModelFormat.MEDIAPIPE
-        ),
-        ModelInfo(
-            id = "qwen3-4b-int4",
-            displayName = "Qwen 3 4B",
-            parameterCountB = 4.0f,
-            downloadSizeMb = 2200,
-            downloadUrl = "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/qwen3-4b-q4_k_m.gguf",
-            quantizationFormat = "int4",
-            requiredRamMb = 4096,
-            capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.GGUF
-        )
-    )
+    val generativeModels: List<ModelInfo> = emptyList()
 
     /**
-     * The team-selected embedding model.
-     * Small, efficient, runs on all target devices (6GB+ RAM).
+     * The embedding model. Small, ungated, and runs on stable LiteRT 2.2.0.
+     *
+     * Gecko rather than EmbeddingGemma: every Gemma repository on LiteRT
+     * Community is `gated`, which needs an authenticated licence-accepting
+     * request, and oneMind promises no accounts.
+     *
+     * The 512-token variant is the middle of four sequence lengths (64, 256, 512,
+     * 1024). Memories are short, and a longer window costs size for capacity that
+     * would mostly go unused.
      */
     val embeddingModel: EmbeddingModelInfo = EmbeddingModelInfo(
-        id = "all-minilm-l6-v2",
-        displayName = "MiniLM-L6-v2 (Embeddings)",
-        downloadSizeMb = 46,
-        downloadUrl = "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx",
-        outputDimensions = 384,
-        format = ModelFormat.MEDIAPIPE
+        id = "gecko-110m-en-512-quant",
+        displayName = "Gecko 110M (English)",
+        downloadSizeMb = 115,
+        downloadUrl = "https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_512_quant.tflite",
+        outputDimensions = 768,
+        format = ModelFormat.LITERT
     )
 
     /**
-     * Filter models that can run on the device based on available RAM.
+     * Whether any local generative model can be offered.
+     *
+     * The onboarding flow reads this instead of assuming the list is non-empty,
+     * so restoring local models later is a registry change rather than a UI
+     * change.
      */
-    fun getCompatibleModels(availableRamMb: Int): List<ModelInfo> {
-        return generativeModels.filter { it.requiredRamMb <= availableRamMb }
-    }
+    val hasLocalGenerativeModels: Boolean
+        get() = generativeModels.isNotEmpty()
+
+    fun getCompatibleModels(availableRamMb: Int): List<ModelInfo> =
+        generativeModels.filter { it.requiredRamMb <= availableRamMb }
 
     /**
-     * Get the recommended model for the given RAM.
-     * Picks the largest model that fits comfortably (with 1GB headroom).
+     * Largest model that fits with headroom for the OS and the app itself.
+     * Returns null while [generativeModels] is empty.
      */
     fun getRecommendedModel(availableRamMb: Int): ModelInfo? {
-        val headroom = 1024 // 1GB buffer for OS + app
+        val headroom = OS_HEADROOM_MB
         return generativeModels
             .filter { it.requiredRamMb <= (availableRamMb - headroom) }
             .maxByOrNull { it.parameterCountB }
     }
 
-    fun getModelById(id: String): ModelInfo? {
-        return generativeModels.find { it.id == id }
+    fun getModelById(id: String): ModelInfo? = generativeModels.find { it.id == id }
+
+    companion object {
+        /** Reserved for the OS and oneMind itself when sizing a model. */
+        const val OS_HEADROOM_MB = 1024
+
+        /**
+         * Verified candidates for when local generative inference is revisited.
+         *
+         * Not offered to users: no runtime can execute them yet. Kept here so the
+         * research does not have to be repeated, and so the URL test keeps
+         * checking they still resolve. Every one is ungated and returned HTTP 200
+         * on 2026-08-22, with sizes from the real `content-length`.
+         *
+         * Note the shape of the tradeoff, which is the deferred design question
+         * in ADR-0002: the vision-capable entries are far smaller in parameter
+         * count, so choosing vision currently means choosing worse text.
+         */
+        val candidateLocalModels: List<ModelInfo> = listOf(
+            ModelInfo(
+                id = "qwen2.5-0.5b-instruct-q8",
+                displayName = "Qwen2.5 0.5B Instruct",
+                parameterCountB = 0.5f,
+                downloadSizeMb = 521,
+                downloadUrl = "https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+                quantizationFormat = "q8",
+                requiredRamMb = 1536,
+                capabilities = setOf(LlmCapability.TEXT_GENERATION),
+                format = ModelFormat.MEDIAPIPE_TASK
+            ),
+            ModelInfo(
+                id = "qwen2.5-1.5b-instruct-q8",
+                displayName = "Qwen2.5 1.5B Instruct",
+                parameterCountB = 1.5f,
+                downloadSizeMb = 1524,
+                downloadUrl = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+                quantizationFormat = "q8",
+                requiredRamMb = 3072,
+                capabilities = setOf(LlmCapability.TEXT_GENERATION),
+                format = ModelFormat.MEDIAPIPE_TASK
+            ),
+            ModelInfo(
+                id = "lfm2.5-vl-450m-int8",
+                displayName = "LFM2.5 VL 450M",
+                parameterCountB = 0.45f,
+                downloadSizeMb = 537,
+                downloadUrl = "https://huggingface.co/litert-community/LFM2.5-VL-450M/resolve/main/LFM2.5-VL-450M_int8.litertlm",
+                quantizationFormat = "int8",
+                requiredRamMb = 1536,
+                capabilities = setOf(LlmCapability.TEXT_GENERATION, LlmCapability.VISION),
+                format = ModelFormat.LITERT_LM
+            ),
+            ModelInfo(
+                id = "qwen2-vl-2b",
+                displayName = "Qwen2 VL 2B",
+                parameterCountB = 2.0f,
+                downloadSizeMb = 1701,
+                downloadUrl = "https://huggingface.co/litert-community/Qwen2-VL-2B/resolve/main/Qwen2-VL-2B.litertlm",
+                quantizationFormat = "mixed",
+                requiredRamMb = 3584,
+                capabilities = setOf(LlmCapability.TEXT_GENERATION, LlmCapability.VISION),
+                format = ModelFormat.LITERT_LM
+            )
+        )
     }
 }

@@ -45,7 +45,11 @@ class OnboardingViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 availableModels = compatible,
-                recommendedModelId = recommended?.id
+                recommendedModelId = recommended?.id,
+                // No local generative runtime exists yet (ADR-0002), so the only
+                // route to enrichment is a cloud provider. Onboarding says so
+                // rather than offering a download that cannot run.
+                localModelsAvailable = modelRegistry.hasLocalGenerativeModels
             )
         }
     }
@@ -182,6 +186,72 @@ class OnboardingViewModel @Inject constructor(
         _uiState.update { it.copy(step = OnboardingStep.CLOUD_CONFIG) }
     }
 
+    /**
+     * Proceed without any generative provider.
+     *
+     * Entirely viable: capture, OCR and search all work with no provider at all.
+     * Only the interpretive layer - summaries, categories, image descriptions - is
+     * absent, and stages record NOT_SUPPORTED for those.
+     */
+    fun onSkipProvider() {
+        downloadEmbeddingModelThenFinish()
+    }
+
+    /**
+     * Fetch the embedding model and finish onboarding.
+     *
+     * This runs on every route out of onboarding, because semantic search needs
+     * it and it is the one model with a stable runtime (LiteRT 2.2.0). At ~115MB
+     * it is a small enough ask to be unconditional.
+     */
+    private fun downloadEmbeddingModelThenFinish() {
+        val embedding = modelRegistry.embeddingModel
+
+        if (modelDownloadManager.isModelDownloaded(embedding.id)) {
+            completeOnboarding()
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                step = OnboardingStep.DOWNLOADING,
+                isDownloading = true,
+                downloadProgress = 0,
+                downloadError = null
+            )
+        }
+
+        downloadJob = viewModelScope.launch {
+            modelDownloadManager
+                .downloadModel(embedding.id, embedding.downloadUrl)
+                .collect { progress ->
+                    when (progress) {
+                        is DownloadProgress.Downloading -> _uiState.update {
+                            it.copy(
+                                downloadProgress = progress.progressPercent,
+                                downloadedMb = progress.bytesDownloaded / (1024 * 1024),
+                                totalMb = progress.totalBytes / (1024 * 1024)
+                            )
+                        }
+                        is DownloadProgress.Completed -> completeOnboarding()
+                        is DownloadProgress.Failed -> _uiState.update {
+                            it.copy(isDownloading = false, downloadError = progress.error)
+                        }
+                        is DownloadProgress.Started -> Unit
+                    }
+                }
+        }
+    }
+
+    private fun completeOnboarding() {
+        viewModelScope.launch {
+            onboardingPreferences.setOnboardingComplete()
+            _uiState.update {
+                it.copy(step = OnboardingStep.COMPLETE, isDownloading = false)
+            }
+        }
+    }
+
     fun onCloudBaseUrlChanged(url: String) {
         _uiState.update { it.copy(cloudBaseUrl = url, cloudTestResult = null) }
     }
@@ -235,8 +305,8 @@ class OnboardingViewModel @Inject constructor(
                 modelName = state.cloudModelName.trim(),
                 supportsVision = state.cloudSupportsVision
             )
-            onboardingPreferences.setOnboardingComplete()
-            _uiState.update { it.copy(step = OnboardingStep.COMPLETE) }
+            // Search needs the embedding model regardless of the provider choice.
+            downloadEmbeddingModelThenFinish()
         }
     }
 

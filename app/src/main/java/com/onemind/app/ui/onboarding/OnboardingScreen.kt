@@ -33,9 +33,11 @@ fun OnboardingScreen(
                 recommendedModelId = uiState.recommendedModelId,
                 selectedModel = uiState.selectedModel,
                 isMeteredNetwork = uiState.isMeteredNetwork,
+                localModelsAvailable = uiState.localModelsAvailable,
                 onSelectModel = { viewModel.onSelectModel(it) },
                 onStartDownload = { viewModel.onStartDownload() },
-                onChooseCloud = { viewModel.onChooseCloud() }
+                onChooseCloud = { viewModel.onChooseCloud() },
+                onSkip = { viewModel.onSkipProvider() }
             )
             OnboardingStep.DOWNLOADING -> DownloadScreen(
                 modelName = uiState.selectedModel?.displayName ?: "",

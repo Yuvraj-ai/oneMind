@@ -44,7 +44,7 @@ class ProviderManagerTest {
             quantizationFormat = "int4",
             requiredRamMb = 2048,
             capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.MEDIAPIPE
+            format = ModelFormat.MEDIAPIPE_TASK
         )
 
         providerManager.activateLocal(model)
@@ -78,7 +78,7 @@ class ProviderManagerTest {
             downloadSizeMb = 500, downloadUrl = "https://example.com",
             quantizationFormat = "int4", requiredRamMb = 2048,
             capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.MEDIAPIPE
+            format = ModelFormat.MEDIAPIPE_TASK
         )
 
         providerManager.activateLocal(model)
@@ -95,7 +95,7 @@ class ProviderManagerTest {
             downloadSizeMb = 500, downloadUrl = "https://example.com",
             quantizationFormat = "int4", requiredRamMb = 2048,
             capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.MEDIAPIPE
+            format = ModelFormat.MEDIAPIPE_TASK
         )
 
         providerManager.activateLocal(model)
@@ -114,7 +114,7 @@ class ProviderManagerTest {
             downloadSizeMb = 500, downloadUrl = "https://example.com",
             quantizationFormat = "int4", requiredRamMb = 2048,
             capabilities = setOf(LlmCapability.TEXT_GENERATION),
-            format = ModelFormat.MEDIAPIPE
+            format = ModelFormat.MEDIAPIPE_TASK
         )
 
         providerManager.activateLocal(model)

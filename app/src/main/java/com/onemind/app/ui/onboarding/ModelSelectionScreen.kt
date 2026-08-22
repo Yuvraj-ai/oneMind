@@ -20,10 +20,17 @@ fun ModelSelectionScreen(
     recommendedModelId: String?,
     selectedModel: ModelInfo?,
     isMeteredNetwork: Boolean,
+    localModelsAvailable: Boolean,
     onSelectModel: (ModelInfo) -> Unit,
     onStartDownload: () -> Unit,
-    onChooseCloud: () -> Unit
+    onChooseCloud: () -> Unit,
+    onSkip: () -> Unit
 ) {
+    if (!localModelsAvailable) {
+        NoLocalModelsScreen(onChooseCloud = onChooseCloud, onSkip = onSkip)
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -90,6 +97,69 @@ fun ModelSelectionScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Use a cloud provider instead")
+        }
+    }
+}
+
+@Composable
+private fun NoLocalModelsScreen(onChooseCloud: () -> Unit, onSkip: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Set up AI enrichment",
+            style = MaterialTheme.typography.headlineMedium
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Honest about what works and what does not, rather than offering a
+        // download that cannot run. See ADR-0002.
+        Text(
+            text = "oneMind reads text out of your screenshots on-device, with no " +
+                "account and nothing leaving your phone. That part always works.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "Summaries, categories and image descriptions need a language " +
+                "model. On-device models aren't ready yet on Android, so for now " +
+                "these come from an AI provider you choose and configure yourself.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "You can skip this and add it later. Saving and searching your " +
+                "memories works either way.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Button(
+            onClick = onChooseCloud,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Configure a provider")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(
+            onClick = onSkip,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Skip for now")
         }
     }
 }

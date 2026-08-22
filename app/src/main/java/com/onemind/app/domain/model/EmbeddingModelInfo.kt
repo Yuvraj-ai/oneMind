@@ -1,20 +1,19 @@
 package com.onemind.app.domain.model
 
 /**
- * Metadata for the team-selected embedding model.
- * Not user-configurable — chosen for efficiency and broad device compatibility.
+ * Metadata for the embedding model.
+ *
+ * Not user-configurable. Chosen for efficiency, broad device compatibility, and
+ * an ungated download, since oneMind promises no accounts.
  */
 data class EmbeddingModelInfo(
-    /** Unique identifier */
     val id: String,
-    /** Human-readable name */
     val displayName: String,
-    /** Download size in MB */
+    /** Real download size in megabytes. */
     val downloadSizeMb: Int,
-    /** URL to download */
+    /** URL that must resolve unauthenticated. */
     val downloadUrl: String,
-    /** Output vector dimensions (e.g. 384) */
+    /** Dimensionality of the vectors this model produces. */
     val outputDimensions: Int,
-    /** Model format */
-    val format: ModelFormat = ModelFormat.MEDIAPIPE
+    val format: ModelFormat
 )

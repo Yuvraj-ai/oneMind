@@ -21,7 +21,12 @@ data class OnboardingUiState(
     val cloudModelName: String = "",
     val cloudSupportsVision: Boolean = false,
     val cloudTestResult: CloudTestResult? = null,
-    val isMeteredNetwork: Boolean = false
+    val isMeteredNetwork: Boolean = false,
+    /**
+     * Whether any local generative model can be offered. False while local
+     * inference is deferred (ADR-0002), which changes what the model step says.
+     */
+    val localModelsAvailable: Boolean = false
 )
 
 enum class OnboardingStep {
