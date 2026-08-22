@@ -234,7 +234,13 @@ private fun getTextSnippet(memory: Memory): String {
     return ""
 }
 
-private fun formatTimestamp(instant: Instant): String {
+/**
+ * A Memory's timestamp, in the device's locale and timezone.
+ *
+ * Shared with [SearchResultCard] so a Memory's date reads identically wherever it
+ * appears — a result and a feed entry are the same object.
+ */
+internal fun formatTimestamp(instant: Instant): String {
     val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
         .withZone(ZoneId.systemDefault())
     return formatter.format(instant)

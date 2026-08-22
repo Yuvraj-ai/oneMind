@@ -13,6 +13,7 @@ import com.onemind.app.domain.model.SourceType
 import com.onemind.app.domain.repository.MemoryRepository
 import com.onemind.app.domain.search.FtsQuery
 import com.onemind.app.domain.search.SearchOrchestrator
+import com.onemind.app.domain.search.SearchResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -70,23 +71,24 @@ class FeedViewModel @Inject constructor(
                         if (FtsQuery.build(query) == null) {
                             // Nothing usable typed — punctuation, or a single
                             // character. Emit no results and let the feed show.
-                            emit(emptyList())
+                            emit(emptyList<SearchResult>() to emptyList<String>())
                             return@flow
                         }
-                        emit(searchMemories(query))
+                        emit(searchOrchestrator.search(query) to FtsQuery.terms(query))
                     }
                 }
-                .collect { results ->
-                    _uiState.update { it.copy(searchResults = results, isSearching = false) }
+                .collect { (results, terms) ->
+                    _uiState.update {
+                        it.copy(searchResults = results, searchTerms = terms, isSearching = false)
+                    }
                 }
         }
     }
 
-    private suspend fun searchMemories(query: String): List<Memory> {
+    private suspend fun searchMemories(query: String): List<SearchResult> {
         // The orchestrator owns understanding, both retrieval paths, hard filters
-        // and ranking. It returns Memories already hydrated and in order, so there
-        // is nothing left here but to hand them to the UI.
-        return searchOrchestrator.search(query).map { it.memory }
+        // and ranking. Results arrive hydrated and in order.
+        return searchOrchestrator.search(query)
     }
 
     fun onSearchQueryChanged(query: String) {
@@ -106,7 +108,12 @@ class FeedViewModel @Inject constructor(
 
     fun clearSearch() {
         _uiState.update {
-            it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false)
+            it.copy(
+                searchQuery = "",
+                searchResults = emptyList(),
+                searchTerms = emptyList(),
+                isSearching = false
+            )
         }
         searchQueryFlow.value = ""
     }

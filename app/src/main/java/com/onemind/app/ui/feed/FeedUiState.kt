@@ -2,6 +2,7 @@ package com.onemind.app.ui.feed
 
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.SourceType
+import com.onemind.app.domain.search.SearchResult
 
 /**
  * UI state for the Memory Feed screen.
@@ -24,7 +25,15 @@ data class FeedUiState(
     val searchQuery: String = "",
 
     /** Matches for [searchQuery], best first. Meaningless while [isSearching]. */
-    val searchResults: List<Memory> = emptyList(),
+    val searchResults: List<SearchResult> = emptyList(),
+
+    /**
+     * Terms the current search matched on, for highlighting snippets.
+     *
+     * Held here rather than recomputed per card: every result needs the same list,
+     * and re-parsing the query for each one would repeat the work on every frame.
+     */
+    val searchTerms: List<String> = emptyList(),
 
     val isSearching: Boolean = false
 ) {

@@ -92,9 +92,8 @@ fun FeedScreen(
             when {
                 uiState.isSearchActive -> SearchResultsSection(
                     uiState = uiState,
-                    onMemoryClick = { onNavigateToMemory(it.id) },
-                    onMemoryLongClick = { viewModel.requestDelete(it) },
-                    onRetryProcessing = { viewModel.retryProcessing(it) }
+                    onMemoryClick = { onNavigateToMemory(it) },
+                    onMemoryLongClick = { viewModel.requestDelete(it) }
                 )
 
                 uiState.isLoading -> Box(
@@ -191,9 +190,8 @@ private fun SearchBar(
 @Composable
 private fun SearchResultsSection(
     uiState: FeedUiState,
-    onMemoryClick: (com.onemind.app.domain.model.Memory) -> Unit,
-    onMemoryLongClick: (com.onemind.app.domain.model.Memory) -> Unit,
-    onRetryProcessing: (com.onemind.app.domain.model.Memory) -> Unit
+    onMemoryClick: (Long) -> Unit,
+    onMemoryLongClick: (com.onemind.app.domain.model.Memory) -> Unit
 ) {
     when {
         uiState.isSearching && uiState.searchResults.isEmpty() -> Box(
@@ -223,13 +221,23 @@ private fun SearchResultsSection(
             }
         }
 
-        else -> MemoryFeedList(
-            memories = uiState.searchResults,
-            onMemoryClick = onMemoryClick,
-            onMemoryLongClick = onMemoryLongClick,
-            onRetryProcessing = onRetryProcessing,
-            modifier = Modifier.fillMaxSize()
-        )
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(
+                items = uiState.searchResults,
+                key = { it.memory.id }
+            ) { result ->
+                SearchResultCard(
+                    result = result,
+                    queryTerms = uiState.searchTerms,
+                    onClick = { onMemoryClick(result.memory.id) },
+                    onLongClick = { onMemoryLongClick(result.memory) }
+                )
+            }
+        }
     }
 }
 
