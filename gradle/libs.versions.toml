@@ -15,6 +15,9 @@ junitExt = "1.2.1"
 espresso = "3.6.1"
 turbine = "1.2.0"
 mockk = "1.13.13"
+# Android stubs org.json in unit tests, so a real implementation is needed on the
+# JVM test classpath for MetadataResponseParser's tests to run at all.
+orgJson = "20260814"
 coil = "2.7.0"
 datastore = "1.1.4"
 work = "2.10.0"
@@ -83,6 +86,7 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 

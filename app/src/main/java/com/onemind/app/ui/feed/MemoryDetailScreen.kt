@@ -1,6 +1,7 @@
 package com.onemind.app.ui.feed
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -131,7 +132,93 @@ private fun MemoryDetailContent(
         // not something the user wrote.
         RecognizedTextSection(memory = memory)
         ImageDescriptionSection(memory = memory)
+        ExtractedMetadataSection(memory = memory)
     }
+}
+
+/**
+ * Structured metadata the pipeline found.
+ *
+ * Links appear even when no model is configured, since they are found by regex.
+ * Dates keep the wording the user actually saw rather than only a resolved
+ * timestamp, because "sometime next spring" is real information that no
+ * timestamp captures.
+ */
+@Composable
+private fun ExtractedMetadataSection(memory: Memory) {
+    val urls = memory.derived.urls
+    val dates = memory.derived.dates
+    val entities = memory.derived.entities
+
+    if (urls.isEmpty() && dates.isEmpty() && entities.isEmpty()) return
+
+    Spacer(modifier = Modifier.height(8.dp))
+    HorizontalDivider()
+    Spacer(modifier = Modifier.height(8.dp))
+
+    if (urls.isNotEmpty()) {
+        MetadataLabel("Links")
+        urls.forEach { url ->
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = url.domain,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = url.rawUrl,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    if (dates.isNotEmpty()) {
+        MetadataLabel("Dates mentioned")
+        dates.forEach { date ->
+            Text(
+                text = date.rawText,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    if (entities.isNotEmpty()) {
+        MetadataLabel("Mentioned")
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            entities.forEach { entity ->
+                SuggestionChip(
+                    onClick = { },
+                    label = {
+                        Text(entity.name, style = MaterialTheme.typography.labelSmall)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetadataLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Spacer(modifier = Modifier.height(4.dp))
 }
 
 @Composable

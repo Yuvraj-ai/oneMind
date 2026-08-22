@@ -140,6 +140,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.mockk)
+    // Real org.json for JVM tests; Android's own is a stub that throws.
+    testImplementation(libs.org.json)
 
     // Android Instrumented Testing
     androidTestImplementation(libs.androidx.junit)
