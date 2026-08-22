@@ -12,7 +12,7 @@ import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.model.SourceType
 import com.onemind.app.domain.repository.MemoryRepository
 import com.onemind.app.domain.search.FtsQuery
-import com.onemind.app.domain.search.KeywordSearcher
+import com.onemind.app.domain.search.SearchOrchestrator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,7 +33,7 @@ class FeedViewModel @Inject constructor(
     private val memoryDao: MemoryDao,
     private val imageFileStorage: ImageFileStorage,
     private val processingScheduler: ProcessingScheduler,
-    private val keywordSearcher: KeywordSearcher,
+    private val searchOrchestrator: SearchOrchestrator,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -83,17 +83,10 @@ class FeedViewModel @Inject constructor(
     }
 
     private suspend fun searchMemories(query: String): List<Memory> {
-        val matches = keywordSearcher.search(query)
-        if (matches.isEmpty()) return emptyList()
-
-        // Hydrate in one query, then restore the ranked order: SQL `IN` makes no
-        // promise about row order, so relying on it would silently discard the
-        // ranking that is the entire point of scoring.
-        val byId = memoryRepository
-            .getMemoriesByIds(matches.map { it.memoryId })
-            .associateBy { it.id }
-
-        return matches.mapNotNull { byId[it.memoryId] }
+        // The orchestrator owns understanding, both retrieval paths, hard filters
+        // and ranking. It returns Memories already hydrated and in order, so there
+        // is nothing left here but to hand them to the UI.
+        return searchOrchestrator.search(query).map { it.memory }
     }
 
     fun onSearchQueryChanged(query: String) {
