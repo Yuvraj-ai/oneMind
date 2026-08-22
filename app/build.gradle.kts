@@ -142,6 +142,8 @@ dependencies {
     testImplementation(libs.mockk)
     // Real org.json for JVM tests; Android's own is a stub that throws.
     testImplementation(libs.org.json)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 
     // Android Instrumented Testing
     androidTestImplementation(libs.androidx.junit)

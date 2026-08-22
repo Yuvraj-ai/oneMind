@@ -16,6 +16,7 @@ import com.onemind.app.ui.theme.OneMindTheme
 
 @Composable
 fun OneMindApp(
+    openMemoryId: Long? = null,
     appViewModel: AppViewModel = hiltViewModel()
 ) {
     OneMindTheme {
@@ -46,6 +47,17 @@ fun OneMindApp(
                         navController = navController,
                         startDestination = startDestination
                     )
+
+                    // Navigate to a specific Memory when launched from a
+                    // notification tap. LaunchedEffect keyed on the id ensures
+                    // it fires once per distinct navigation request.
+                    LaunchedEffect(openMemoryId) {
+                        if (openMemoryId != null && isOnboardingComplete == true) {
+                            navController.navigate(NavRoutes.memoryDetail(openMemoryId)) {
+                                launchSingleTop = true
+                            }
+                        }
+                    }
                 }
             }
         }

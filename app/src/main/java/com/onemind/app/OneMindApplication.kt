@@ -13,6 +13,14 @@ class OneMindApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var notificationChannels: com.onemind.app.capture.NotificationChannels
+
+    override fun onCreate() {
+        super.onCreate()
+        notificationChannels.create()
+    }
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)

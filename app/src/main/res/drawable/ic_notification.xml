@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <!-- A simple "brain/memory" icon: stylised lightbulb outline -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,2C8.13,2 5,5.13 5,9c0,2.38 1.19,4.47 3,5.74V17c0,0.55 0.45,1 1,1h1v3h6v-3h1c0.55,0 1,-0.45 1,-1v-2.26c1.81,-1.27 3,-3.36 3,-5.74C20,5.13 16.87,2 12,2zM14,16h-4v-1h4V16zM15.31,12.9L14,13.82V15h-4v-1.18l-1.31,-0.92C7.64,12.18 7,10.66 7,9c0,-2.76 2.24,-5 5,-5s5,2.24 5,5C17,10.66 16.36,12.18 15.31,12.9z"/>
+</vector>
