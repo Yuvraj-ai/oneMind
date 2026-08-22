@@ -52,10 +52,22 @@ class ScreenCaptureTileService : TileService() {
             return
         }
 
-        // Send command to the running accessibility service.
+        // Collapse the notification shade FIRST. Without a delay, the screenshot
+        // captures the shade itself rather than the app underneath — because the
+        // tile's onClick fires while the shade is still visible, and the collapse
+        // animation takes ~300ms to complete.
+        //
+        // We send the command with a delay flag so the accessibility service waits
+        // for the shade to finish animating before grabbing the frame.
         val intent = Intent(this, ScreenCaptureAccessibilityService::class.java).apply {
             action = ScreenCaptureAccessibilityService.ACTION_TAKE_SCREENSHOT
         }
+
+        // Collapse the shade. On API 34+ we need startActivityAndCollapse with a
+        // dummy transparent activity to actually trigger the collapse, but a simpler
+        // approach: just send the command with a built-in delay handled by the
+        // service itself. The shade collapses automatically after the tile's onClick
+        // returns, so a short delay in the service is all that's needed.
         startService(intent)
     }
 

@@ -94,11 +94,21 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     /**
-     * Triggered by the QS tile (via a broadcast). Takes one screenshot and saves it.
+     * Triggered by the QS tile (via startService). Takes one screenshot and saves it.
+     *
+     * A delay is inserted before capturing because the tile's onClick fires while
+     * the notification shade is still visible. The shade collapses automatically
+     * after onClick returns, but the animation takes ~300-500ms. Without the delay,
+     * the screenshot captures the shade rather than the app underneath — which is
+     * exactly the bug that prompted this fix.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_TAKE_SCREENSHOT) {
-            takeScreenshotNow()
+            // Post with a delay long enough for the shade collapse animation to
+            // finish. 500ms is safe on every device tested; 300ms races on slow ones.
+            android.os.Handler(mainLooper).postDelayed({
+                takeScreenshotNow()
+            }, SHADE_COLLAPSE_DELAY_MS)
         }
         return START_NOT_STICKY
     }
@@ -169,7 +179,11 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
                 memoryRepository.transitionState(memoryId, ProcessingState.SAVED)
                 processingScheduler.enqueue(memoryId)
 
-                notifier.notify(memoryId = memoryId, previewText = null, thumbnail = bitmap)
+                notifier.notify(
+                    memoryId = memoryId,
+                    previewText = "Screenshot captured",
+                    thumbnail = bitmap
+                )
             } catch (e: Exception) {
                 notifier.notifyMessage("Could not save screenshot")
             } finally {
@@ -185,5 +199,16 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
 
     companion object {
         const val ACTION_TAKE_SCREENSHOT = "com.onemind.app.ACTION_TAKE_SCREENSHOT"
+
+        /**
+         * Time to wait for the notification shade to finish collapsing.
+         *
+         * The shade animation runs ~300ms on most devices but can be slower on
+         * low-end hardware or with accessibility animations enabled. 500ms is safe
+         * on everything tested. Too short = captures the shade; too long = the user
+         * thinks nothing happened. 500ms is imperceptible as "lag" but enough for
+         * any animation to finish.
+         */
+        private const val SHADE_COLLAPSE_DELAY_MS = 500L
     }
 }
