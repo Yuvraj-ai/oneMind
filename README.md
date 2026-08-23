@@ -57,7 +57,7 @@ This is the part worth reading carefully, because it is the reason the app is bu
 **Semantic search is always local.** It uses a ~6MB sentence-embedding model downloaded once on first launch and run entirely on-device, so meaning-based search works with no provider and no network.
 
 **What the two Quick Settings tiles do and do not do:**
-- Screen capture asks Android for permission *every single time*, captures one frame, and releases the permission before the memory is even written. There is no continuous screen monitoring.
+- Screen capture takes one screenshot when you tap the tile, and nothing at any other time. It works through an Accessibility Service, which Android gates behind a switch you turn on yourself in Settings and can turn off whenever you like. The service sets `canRetrieveWindowContent="false"`, so the system never hands it the text or structure of your screen — the only thing it observes besides your tap is which app is in the foreground, so the memory can record where the screenshot came from. No continuous monitoring, no recording.
 - The clipboard tile reads your clipboard only when you tap it. It never registers a clipboard listener.
 
 **Known limitation:** your cloud provider's API key is currently stored unencrypted in app-private storage. It is unreadable by other apps on a non-rooted device, but it is not encrypted at rest. See [Known issues](#known-issues).
@@ -88,8 +88,8 @@ See [BUILDING.md](BUILDING.md) for toolchain setup, then:
 
 ```bash
 ./gradlew assembleDebug          # debug APK
-./gradlew testDebugUnitTest      # 603 unit tests
-./gradlew connectedDebugAndroidTest   # 56 instrumented tests, needs a device
+./gradlew testDebugUnitTest      # 598 unit tests
+./gradlew connectedDebugAndroidTest   # 62 instrumented tests, needs a device
 ./gradlew lintDebug              # static analysis
 ```
 
@@ -111,7 +111,7 @@ Stage order is the declaration order of an enum, so it cannot be got wrong by a 
 
 **Original content is never replaced by what a machine inferred about it.** Summaries, categories and descriptions are derived data, stored separately, and can be thrown away and rebuilt at any time. Your memory is authoritative.
 
-**Migrations are written by hand and tested.** Four schema versions so far, each migration tested for preservation of existing memories, including the full v1→v4 chain for someone upgrading from the first release. `fallbackToDestructiveMigration` is never used: a memory is something you asked the app to remember, so dropping the database on a schema change is not an acceptable failure mode.
+**Migrations are written by hand and tested.** Five schema versions so far, each migration tested for preservation of existing memories, including the full v1→v5 chain for someone upgrading from the first release. `fallbackToDestructiveMigration` is never used: a memory is something you asked the app to remember, so dropping the database on a schema change is not an acceptable failure mode.
 
 ### Documentation
 
@@ -184,7 +184,7 @@ The release APK is ARM-only (to keep the size at 42MB), so it won't install on a
 
 ## Testing
 
-592 unit tests (JVM, including Robolectric) + 56 instrumented (real device).
+598 unit tests (JVM, including Robolectric) + 62 instrumented (real device).
 
 ### Running tests
 
@@ -232,7 +232,7 @@ If you're testing Room migrations or anything that needs a real SQLite, use the 
 ## Known issues
 
 - **API keys are stored unencrypted** in app-private storage. Should be `EncryptedSharedPreferences` or the Keystore.
-- **Screen capture is unverified by automated test.** See above.
+- **Screen capture is unverified by automated test.** The Accessibility Service's `takeScreenshot()` path needs the service actually enabled by a user, which an emulator cannot grant non-interactively. It needs a manual run on a device.
 - **No UI tests.** Compose behaviour is verified by inspection, not by instrumentation.
 - **Search relevance thresholds are set from limited measurement.** They will need tuning against real collections; the constants are named and documented for exactly that reason.
 - `Category.parentId` exists in the schema but is unpopulated and read by nothing — reserved so that adding hierarchy later needs no migration.

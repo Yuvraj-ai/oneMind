@@ -102,6 +102,12 @@ versionName = "0.1.0"  // string humans read.
 
 While the app is pre-1.0, a minor bump is the normal case.
 
+**This has been got wrong once.** 0.1.2 carried the v4→v5 migration and shipped as
+a patch. Nothing broke — `versionCode` still increased, so the update installed —
+but the version number stopped telling anyone that release touched their database,
+which is the whole job the rule does. If you are editing anything under
+`data/local/`, the next release is a minor.
+
 ## Release checklist
 
 ### 1. Verify on a clean tree
@@ -109,7 +115,7 @@ While the app is pre-1.0, a minor bump is the normal case.
 ```bash
 git status                      # must be clean
 ./gradlew clean
-./gradlew testDebugUnitTest     # 603 tests
+./gradlew testDebugUnitTest     # 598 tests
 ./gradlew lintDebug
 ./gradlew assembleDebug
 ```
@@ -120,7 +126,7 @@ git status                      # must be clean
 
 ```bash
 ./scripts/emulator.fish start
-./gradlew connectedDebugAndroidTest   # 56 tests
+./gradlew connectedDebugAndroidTest   # 62 tests
 ./scripts/emulator.fish stop
 ```
 
@@ -197,7 +203,7 @@ Keep every released APK somewhere you can find it. You will need the previous on
 
 ## Schema changes
 
-Room's schema version lives in `OneMindDatabase.kt`. Currently **4**.
+Room's schema version lives in `OneMindDatabase.kt`. Currently **5**.
 
 If your release changes anything about the database, all of the following are required:
 

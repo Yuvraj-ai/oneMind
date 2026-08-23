@@ -99,8 +99,16 @@ Then `./scripts/emulator.fish start`, which boots headless and blocks until
 
 ## Current verification status
 
+As of v0.1.3.
+
 | Suite | Count | Status |
 |---|---|---|
-| Unit (JVM) | 55 | passing |
-| Instrumented (emulator, API 36) | 7 | passing |
+| Unit (JVM, incl. Robolectric) | 598 | passing |
+| Instrumented (emulator, API 36) | 62 | passing |
 | Lint | — | 0 errors |
+
+The instrumented suite is the one that is easy to leave broken, because it needs a
+device and so does not run as part of an ordinary check. It stopped compiling once
+already — a field inserted into the middle of an entity shifted every positional
+constructor argument in a DAO test, and nothing noticed until the next time
+someone booted an emulator. Run it before a release, not just `testDebugUnitTest`.

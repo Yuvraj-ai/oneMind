@@ -7,7 +7,7 @@ enum class SourceType {
     /** Created via the in-app manual composer */
     MANUAL,
 
-    /** Captured via screen capture (MediaProjection) */
+    /** Captured via the screen-capture tile */
     SCREENSHOT,
 
     /** Received via Android Share/Import intent */
