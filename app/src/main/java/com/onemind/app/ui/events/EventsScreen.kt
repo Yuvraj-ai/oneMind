@@ -16,7 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.onemind.app.data.local.entity.DetectedEventEntity
+import com.onemind.app.domain.model.DetectedEvent
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -100,7 +100,7 @@ fun EventsScreen(
 
 @Composable
 private fun EventCard(
-    event: DetectedEventEntity,
+    event: DetectedEvent,
     isExpired: Boolean,
     onTap: () -> Unit,
     onExportToCalendar: (() -> Unit)?
@@ -177,9 +177,8 @@ private fun EmptyEventsState() {
     }
 }
 
-private fun formatEventTime(epochMillis: Long): String {
-    val instant = Instant.ofEpochMilli(epochMillis)
+private fun formatEventTime(at: Instant): String {
     val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
         .withZone(ZoneId.systemDefault())
-    return formatter.format(instant)
+    return formatter.format(at)
 }
