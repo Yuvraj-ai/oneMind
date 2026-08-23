@@ -280,4 +280,113 @@ class SummarizationStageTest {
     fun `the stage declares itself as SUMMARIZATION so it runs last`() {
         assertEquals(StageId.SUMMARIZATION, stage.id)
     }
+
+    // --- title extraction -------------------------------------------------
+
+    @Test
+    fun `a title and summary are both extracted from the requested format`() = runTest {
+        modelReturns(
+            """
+            TITLE: Phone Quick Settings
+            SUMMARY: A screenshot of a Realme phone's quick settings panel.
+            """.trimIndent()
+        )
+
+        stage.process(memory())
+
+        assertEquals("Phone Quick Settings", savedSlot.captured.title)
+        assertEquals(
+            "A screenshot of a Realme phone's quick settings panel.",
+            savedSlot.captured.summaryText
+        )
+    }
+
+    @Test
+    fun `a title survives reasoning that ends in an explicit boundary`() = runTest {
+        modelReturns(
+            """
+            We need to produce a title and summary. The text appears to be a phone
+            screenshot. Let's craft:
+            TITLE: Phone Quick Settings
+            SUMMARY: A screenshot of a Realme phone's quick settings panel.
+            """.trimIndent()
+        )
+
+        stage.process(memory())
+
+        assertEquals("Phone Quick Settings", savedSlot.captured.title)
+    }
+
+    @Test
+    fun `a title survives reasoning with no boundary marker`() = runTest {
+        // takeLastSentences joins sentences with a space, which puts "TITLE:" in the
+        // middle of a line. parseResponse anchors on ^TITLE: (MULTILINE), so the
+        // anchor fails and the title is silently lost.
+        modelReturns(
+            """
+            We need to produce a title. The text appears to be a screenshot of a phone.
+            TITLE: Phone Quick Settings
+            SUMMARY: A screenshot of a Realme phone's quick settings panel.
+            """.trimIndent()
+        )
+
+        stage.process(memory())
+
+        assertEquals("Phone Quick Settings", savedSlot.captured.title)
+    }
+
+    @Test
+    fun `reasoning never reaches the summary, even when the title anchor fails`() = runTest {
+        // The worst consequence of the anchor failing: parseResponse falls back to
+        // `null to cleaned`, so the reasoning AND the literal TITLE:/SUMMARY: labels
+        // are saved as the summary and rendered on the feed card.
+        modelReturns(
+            """
+            We need to produce a title. The text appears to be a screenshot of a phone.
+            TITLE: Phone Quick Settings
+            SUMMARY: A screenshot of a Realme phone's quick settings panel.
+            """.trimIndent()
+        )
+
+        stage.process(memory())
+
+        val summary = savedSlot.captured.summaryText
+        assertFalse("reasoning leaked: $summary", summary.contains("We need to"))
+        assertFalse("reasoning leaked: $summary", summary.contains("text appears to be"))
+        assertFalse("label leaked: $summary", summary.contains("TITLE:"))
+        assertFalse("label leaked: $summary", summary.contains("SUMMARY:"))
+    }
+
+    @Test
+    fun `a summary spanning several lines is kept whole`() = runTest {
+        // `.` excludes newlines, so ^SUMMARY:\s*(.+) captures only the first line and
+        // the rest of the summary is dropped.
+        modelReturns(
+            """
+            TITLE: Ramen Recipes
+            SUMMARY: A collection of tonkotsu ramen resources.
+            Includes simmering times and stock ratios.
+            """.trimIndent()
+        )
+
+        stage.process(memory())
+
+        assertTrue(
+            "lost the tail: ${savedSlot.captured.summaryText}",
+            savedSlot.captured.summaryText.contains("simmering times")
+        )
+    }
+
+    @Test
+    fun `a model that ignores the format still yields a summary and no title`() = runTest {
+        modelReturns("A collection of resources about running AI models on Android.")
+
+        stage.process(memory())
+
+        assertNull(savedSlot.captured.title)
+        assertEquals(
+            "A collection of resources about running AI models on Android.",
+            savedSlot.captured.summaryText
+        )
+    }
 }

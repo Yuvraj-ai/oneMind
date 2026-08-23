@@ -62,8 +62,8 @@ class SummarizationStage @Inject constructor(
             return StageResult.Failed(error.message ?: "Summarization failed", error)
         }
 
-        val cleaned = clean(summary)
-        if (cleaned.isEmpty()) {
+        val (title, summaryText) = parse(summary)
+        if (summaryText.isEmpty()) {
             derivedDataRepository.saveSummary(
                 MemorySummary(
                     memoryId = memory.id,
@@ -75,8 +75,6 @@ class SummarizationStage @Inject constructor(
             )
             return StageResult.Empty
         }
-
-        val (title, summaryText) = parseResponse(cleaned)
 
         derivedDataRepository.saveSummary(
             MemorySummary(
@@ -110,13 +108,9 @@ class SummarizationStage @Inject constructor(
      * caller records as EMPTY.
      */
     private fun clean(raw: String): String {
-        var text = raw.trim()
-
-        // 1. Strip <think>...</think> blocks (DeepSeek-R1, QwQ style).
-        text = THINK_BLOCK.replace(text, "").trim()
-
-        // 2. Strip markdown code fences wrapping the answer.
-        text = text.replace("```", "").trim()
+        // 1-2. Strip <think> blocks and code fences. Shared with [parse], which
+        //      needs them gone before it matches the labels.
+        var text = stripThinkAndFences(raw)
 
         // 3. If there is a clear "reasoning then answer" boundary, take only the
         //    answer. Common boundaries: a line starting with a quote, a line after
@@ -240,32 +234,70 @@ class SummarizationStage @Inject constructor(
     }
 
     /**
-     * Parse the "TITLE: ... SUMMARY: ..." format from the model response.
+     * Pull the title and summary out of a model response.
      *
-     * If the format is not followed, falls back to treating the whole response as a
-     * summary with no title — which is the same result as before title support was
-     * added, so nothing breaks for models that ignore instruction formats.
+     * **Order matters, and it is the opposite of what it looks like it should be.**
+     * The structured `TITLE:`/`SUMMARY:` format is parsed *first*, before [clean]
+     * runs. [clean] strips reasoning by reflowing prose — [takeLastSentences] joins
+     * the sentences it keeps with a space — which moves `TITLE:` into the middle of
+     * a line. The labels are matched with `^` anchors, so a reflowed response loses
+     * its title, and the fallback then saves the model's chain-of-thought *and* the
+     * literal labels as the summary, straight onto the user's feed card.
+     *
+     * Parsing the labels first sidesteps that entirely: when the model followed the
+     * format, the labelled values *are* the answer, so any reasoning above them is
+     * discarded by construction rather than by heuristic.
+     *
+     * Falls back to [clean] over the whole response when the format is absent,
+     * which is the behaviour that existed before titles were added.
      */
-    private fun parseResponse(cleaned: String): Pair<String?, String> {
-        val titleMatch = Regex("""(?i)^TITLE:\s*(.+)""", RegexOption.MULTILINE).find(cleaned)
-        val summaryMatch = Regex("""(?i)^SUMMARY:\s*(.+)""", RegexOption.MULTILINE).find(cleaned)
+    private fun parse(raw: String): Pair<String?, String> {
+        // Only structure-preserving cleanup before matching: `<think>` blocks and
+        // code fences never carry the labels, and removing them cannot reflow the
+        // lines that survive.
+        structured(stripThinkAndFences(raw))?.let { return it }
 
-        if (titleMatch != null && summaryMatch != null) {
-            val title = titleMatch.groupValues[1].trim()
-                .removeSurrounding("\"")
-                .take(MAX_TITLE_LENGTH)
-                .ifBlank { null }
-
-            val summary = summaryMatch.groupValues[1].trim()
-                .removeSurrounding("\"")
-                .ifBlank { cleaned }
-
-            return title to summary
-        }
-
-        // Model didn't follow format — use the whole cleaned text as summary, no title.
-        return null to cleaned
+        return null to clean(raw)
     }
+
+    /**
+     * Read a response that followed the requested format, or null if it did not.
+     *
+     * Requires **both** labels. Demanding `TITLE:` as well as `SUMMARY:` is what
+     * keeps a bare `Summary: ...` conversational preamble on the [clean] path,
+     * where [PREAMBLE] is the thing that should handle it.
+     */
+    private fun structured(text: String): Pair<String?, String>? {
+        val titleMatch = TITLE_LINE.find(text) ?: return null
+        val summaryMatch = SUMMARY_BODY.find(text) ?: return null
+
+        val summary = summaryMatch.groupValues[1]
+            // The body runs to the end of the response, so it may span lines. A
+            // summary is one or two sentences on a card, not a paragraph block.
+            .replace(WHITESPACE_RUN, " ")
+            .trim()
+            .removeSurrounding("\"")
+            .trim()
+
+        if (summary.isEmpty()) return null
+
+        val title = titleMatch.groupValues[1].trim()
+            .removeSurrounding("\"")
+            .trim()
+            .take(MAX_TITLE_LENGTH)
+            .ifBlank { null }
+
+        return title to summary
+    }
+
+    /**
+     * Remove `<think>` blocks and code fences.
+     *
+     * Safe to run before the labels are matched, unlike the rest of [clean]: both
+     * removals delete whole regions and neither joins lines together.
+     */
+    private fun stripThinkAndFences(raw: String): String =
+        THINK_BLOCK.replace(raw.trim(), "").replace("```", "").trim()
 
     companion object {
         /** A couple of sentences, with headroom. Discourages an essay. */
@@ -292,5 +324,28 @@ class SummarizationStage @Inject constructor(
             """^\s*(sure[!,.]?\s*)?(here(?:'s| is)?\s+(?:a\s+)?)?(brief\s+)?summary\s*[:\-]\s*""",
             RegexOption.IGNORE_CASE
         )
+
+        /**
+         * The `TITLE:` line. Deliberately one line — a title that ran on would be a
+         * sentence, and [MAX_TITLE_LENGTH] would truncate it mid-word anyway.
+         */
+        private val TITLE_LINE = Regex(
+            """^[ \t]*TITLE:[ \t]*(.+)$""",
+            setOf(RegexOption.MULTILINE, RegexOption.IGNORE_CASE)
+        )
+
+        /**
+         * Everything after the `SUMMARY:` label, to the end of the response.
+         *
+         * `[\s\S]` rather than `.` on purpose: `.` excludes newlines, which silently
+         * truncated any summary the model wrapped onto a second line.
+         */
+        private val SUMMARY_BODY = Regex(
+            """^[ \t]*SUMMARY:[ \t]*([\s\S]+)""",
+            setOf(RegexOption.MULTILINE, RegexOption.IGNORE_CASE)
+        )
+
+        /** Collapses the newlines a multi-line summary body arrives with. */
+        private val WHITESPACE_RUN = Regex("""\s+""")
     }
 }
