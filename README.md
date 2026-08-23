@@ -237,6 +237,33 @@ If you're testing Room migrations or anything that needs a real SQLite, use the 
 - **Search relevance thresholds are set from limited measurement.** They will need tuning against real collections; the constants are named and documented for exactly that reason.
 - `Category.parentId` exists in the schema but is unpopulated and read by nothing — reserved so that adding hierarchy later needs no migration.
 
+## Built with Kiro
+
+This project was built entirely using [Kiro](https://kiro.dev), AWS's agentic IDE. It's a meaningful demonstration of what Kiro can do end-to-end on a real product, not a toy example:
+
+**What Kiro handled across 40 commits:**
+- Ideation through grilling sessions (`#grill-with-docs`) that sharpened the domain model and produced the glossary
+- Specs written via `#to-spec`, then broken into implementation tickets with blocking edges via `#to-tickets`
+- All 29 tickets implemented sequentially with TDD discipline — verification between each
+- A 3-reviewer parallel code review sweep that found 31 real bugs, 8 of which were confirmed by failing tests written before the fix
+- Architecture decisions recorded as ADRs when the reasoning was worth preserving
+- Room migrations written by hand and tested, including a parity test between SQL and Kotlin implementations that Kiro's own review identified as needed
+
+**Kiro-specific patterns that worked well:**
+- `.kiro/steering/` files (Matt Pocock's skills adapted as steering) gave the agent consistent engineering discipline across sessions
+- Basic Memory MCP kept project context persistent across context compactions and session boundaries
+- Spec → tickets → implement → review as a structured flow rather than ad-hoc prompting
+- Sub-agents dispatched in parallel for the review sweep (3 reviewers + 1 synthesiser), each scoped to a layer
+- The `#diagnosing-bugs` skill's discipline (reproduce → hypothesise → instrument → fix) was used implicitly throughout: every review finding was reproduced as a failing test before being fixed
+
+**What required human judgement:**
+- Product decisions (what an "event" is, whether to use Accessibility Service vs MediaProjection, which LLM models to trust)
+- The signing key (generated on the user's machine, never seen by the agent)
+- Manual upgrade testing on a real device
+- Choosing which review findings to fix now vs defer
+
+The full context prompt for continuing this project in another agent session is at `CLAUDE_CODE_CONTEXT.md` in the workspace root.
+
 ## Contributing
 
 Issues and pull requests are welcome.
