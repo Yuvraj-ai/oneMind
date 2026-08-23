@@ -211,10 +211,16 @@ class DerivedDataDaoTest {
     @Test
     fun resummarisingReplacesRatherThanDuplicating() = runTest {
         dao.upsertSummary(
-            MemorySummaryEntity(memoryId, "first take", StageStatus.SUCCESS, 1L, "m1")
+            MemorySummaryEntity(
+                memoryId = memoryId, summaryText = "first take",
+                status = StageStatus.SUCCESS, generatedAt = 1L, providerModel = "m1"
+            )
         )
         dao.upsertSummary(
-            MemorySummaryEntity(memoryId, "second take", StageStatus.SUCCESS, 2L, "m1")
+            MemorySummaryEntity(
+                memoryId = memoryId, summaryText = "second take",
+                status = StageStatus.SUCCESS, generatedAt = 2L, providerModel = "m1"
+            )
         )
 
         assertEquals("second take", dao.getSummary(memoryId)!!.summaryText)
@@ -229,8 +235,18 @@ class DerivedDataDaoTest {
             ),
             emptyList()
         )
-        dao.upsertSummary(MemorySummaryEntity(memoryId, "a", StageStatus.SUCCESS, 1L, null))
-        dao.upsertSummary(MemorySummaryEntity(other, "b", StageStatus.SUCCESS, 1L, null))
+        dao.upsertSummary(
+            MemorySummaryEntity(
+                memoryId = memoryId, summaryText = "a",
+                status = StageStatus.SUCCESS, generatedAt = 1L, providerModel = null
+            )
+        )
+        dao.upsertSummary(
+            MemorySummaryEntity(
+                memoryId = other, summaryText = "b",
+                status = StageStatus.SUCCESS, generatedAt = 1L, providerModel = null
+            )
+        )
 
         val fetched = dao.getSummaries(listOf(memoryId, other))
         assertEquals(2, fetched.size)
@@ -263,7 +279,12 @@ class DerivedDataDaoTest {
             ),
             emptyList()
         )
-        dao.upsertSummary(MemorySummaryEntity(other, "keep me", StageStatus.SUCCESS, 1L, null))
+        dao.upsertSummary(
+            MemorySummaryEntity(
+                memoryId = other, summaryText = "keep me",
+                status = StageStatus.SUCCESS, generatedAt = 1L, providerModel = null
+            )
+        )
 
         dao.clearAllDerivedData(memoryId)
 
@@ -333,7 +354,10 @@ class DerivedDataDaoTest {
             )
         )
         dao.upsertSummary(
-            MemorySummaryEntity(memoryId, "about things", StageStatus.SUCCESS, 1L, "m1")
+            MemorySummaryEntity(
+                memoryId = memoryId, summaryText = "about things",
+                status = StageStatus.SUCCESS, generatedAt = 1L, providerModel = "m1"
+            )
         )
         dao.upsertEmbedding(
             MemoryEmbeddingEntity(

@@ -548,4 +548,184 @@ class MigrationTest {
         room.openHelper.writableDatabase
         room.close()
     }.getOrThrow()
+
+    // --- v4 -> v5: memory titles and detected events -----------------------
+
+    /** Seed a v4 database with one enriched, indexed Memory. */
+    private fun seedV4WithEnrichedMemory() {
+        seedV3WithEnrichedMemory()
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4).close()
+    }
+
+    @Test
+    fun migrate4To5_preservesExistingMemoriesAndTheirDerivedData() {
+        seedV4WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 5, true, Migrations.MIGRATION_4_5)
+
+        db.query("SELECT content FROM content_blocks WHERE memoryId = 5").use { c ->
+            assertTrue("the Memory's content must survive", c.moveToFirst())
+            assertEquals("Notes on tonkotsu ramen", c.getString(0))
+        }
+        db.query("SELECT summaryText FROM memory_summaries WHERE memoryId = 5").use { c ->
+            assertTrue("the summary must survive", c.moveToFirst())
+            assertEquals("A ramen recipe collection.", c.getString(0))
+        }
+        db.query("SELECT extractedText FROM ocr_results WHERE memoryId = 5").use { c ->
+            assertTrue("OCR text must survive", c.moveToFirst())
+            assertEquals("Simmer for twelve hours", c.getString(0))
+        }
+        db.query("SELECT description FROM vision_results WHERE memoryId = 5").use { c ->
+            assertTrue("the image description must survive", c.moveToFirst())
+            assertEquals("A bowl of noodle soup", c.getString(0))
+        }
+        db.query("SELECT name FROM extracted_entities WHERE memoryId = 5").use { c ->
+            assertTrue("entities must survive", c.moveToFirst())
+            assertEquals("Tokyo", c.getString(0))
+        }
+        db.query("SELECT domain FROM extracted_urls WHERE memoryId = 5").use { c ->
+            assertTrue("links must survive", c.moveToFirst())
+            assertEquals("seriouseats.com", c.getString(0))
+        }
+        // The FTS index is a virtual table with no foreign key, so it is the row most
+        // likely to be left behind by a migration that touches derived data.
+        db.query(
+            "SELECT rowid FROM memory_search_index WHERE memory_search_index MATCH 'tonkotsu'"
+        ).use { c ->
+            assertTrue("the Memory must still be searchable after upgrading", c.moveToFirst())
+            assertEquals(5L, c.getLong(0))
+        }
+    }
+
+    @Test
+    fun migrate4To5_givesExistingSummariesANullTitle() {
+        // The ALTER TABLE adds a nullable column with no backfill: titles arrive when
+        // a Memory is next reprocessed. Reading one before that must give null, not
+        // an empty string and not a crash.
+        seedV4WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 5, true, Migrations.MIGRATION_4_5)
+
+        db.query("SELECT title FROM memory_summaries WHERE memoryId = 5").use { c ->
+            assertTrue(c.moveToFirst())
+            assertTrue("a pre-v5 summary should have no title", c.isNull(0))
+        }
+    }
+
+    @Test
+    fun migrate4To5_letsAnEventBeRecordedAgainstAMemory() {
+        seedV4WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 5, true, Migrations.MIGRATION_4_5)
+
+        db.execSQL(
+            """
+            INSERT INTO detected_events (memoryId, eventTime, eventTitle, status, remindersScheduledAt)
+            VALUES (5, 1800000000000, 'Ramen festival', 'UPCOMING', NULL)
+            """.trimIndent()
+        )
+
+        db.query("SELECT eventTitle, status FROM detected_events WHERE memoryId = 5").use { c ->
+            assertTrue("the new table must accept a row", c.moveToFirst())
+            assertEquals("Ramen festival", c.getString(0))
+            assertEquals("UPCOMING", c.getString(1))
+        }
+    }
+
+    @Test
+    fun migrate4To5_deletingAMemoryTakesItsEventsWithIt() {
+        // detected_events cascades from memories(id). Worth asserting because the
+        // sibling FTS table cannot cascade at all, and that asymmetry has already
+        // caused one bug: deleting a Memory used to leave its search-index row.
+        seedV4WithEnrichedMemory()
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 5, true, Migrations.MIGRATION_4_5)
+
+        // Foreign keys are per-connection in SQLite and off by default. Room enables
+        // them; MigrationTestHelper's raw connection does not, so without this the
+        // assertion below would pass whether or not the FK exists.
+        db.execSQL("PRAGMA foreign_keys = ON")
+        db.execSQL(
+            """
+            INSERT INTO detected_events (memoryId, eventTime, eventTitle, status, remindersScheduledAt)
+            VALUES (5, 1800000000000, 'Ramen festival', 'UPCOMING', NULL)
+            """.trimIndent()
+        )
+
+        // Prove the row is really there first: without this, a silently rejected
+        // INSERT would make the COUNT below zero and the test would pass whether or
+        // not anything cascaded.
+        db.query("SELECT COUNT(*) FROM detected_events WHERE memoryId = 5").use { c ->
+            c.moveToFirst()
+            assertEquals("the event should exist before the Memory is deleted", 1, c.getInt(0))
+        }
+
+        db.execSQL("DELETE FROM memories WHERE id = 5")
+
+        db.query("SELECT COUNT(*) FROM detected_events WHERE memoryId = 5").use { c ->
+            c.moveToFirst()
+            assertEquals("an orphaned event would outlive the Memory it describes", 0, c.getInt(0))
+        }
+    }
+    @Test
+    fun migrate1To5_worksAsOneUpgradeForSomeoneOnTheOriginalRelease() {
+        // Someone who installed the first release and has not opened the app since
+        // upgrades straight to v5. Room chains all four migrations.
+        helper.createDatabase(TEST_DB, 1).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO memories (id, createdAt, updatedAt, sourceType, processingState, sourcePackage)
+                VALUES (3, 1700000000000, 1700000000000, 'SHARE', 'READY', 'com.android.chrome')
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO content_blocks (id, memoryId, position, type, content, thumbnailPath, metadata)
+                VALUES (1, 3, 0, 'TEXT', 'An article about quantization', NULL, NULL)
+                """.trimIndent()
+            )
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 5, true, *Migrations.ALL)
+
+        db.query("SELECT content FROM content_blocks WHERE memoryId = 3").use { c ->
+            assertTrue("the v1 Memory should survive four migrations", c.moveToFirst())
+            assertEquals("An article about quantization", c.getString(0))
+        }
+        db.query("SELECT COUNT(*) FROM categories").use { c ->
+            c.moveToFirst()
+            assertEquals(CategoryDictionary.ALL.size, c.getInt(0))
+        }
+        db.query(
+            "SELECT rowid FROM memory_search_index WHERE memory_search_index MATCH 'quantization'"
+        ).use { c ->
+            assertTrue("a v1 Memory should be searchable after upgrading to v5", c.moveToFirst())
+        }
+        // The table v5 introduced must be usable at the end of the chain.
+        db.execSQL(
+            """
+            INSERT INTO detected_events (memoryId, eventTime, eventTitle, status, remindersScheduledAt)
+            VALUES (3, 1800000000000, 'A talk on quantization', 'UPCOMING', NULL)
+            """.trimIndent()
+        )
+        db.query("SELECT COUNT(*) FROM detected_events WHERE memoryId = 3").use { c ->
+            c.moveToFirst()
+            assertEquals(1, c.getInt(0))
+        }
+    }
+
+    @Test
+    fun migrate4To5_thenOpeningWithRoomWorks() = runCatching {
+        helper.createDatabase(TEST_DB, 4).close()
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, Migrations.MIGRATION_4_5)
+
+        val room = Room.databaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            OneMindDatabase::class.java,
+            TEST_DB
+        ).addMigrations(*Migrations.ALL).build()
+
+        room.openHelper.writableDatabase
+        room.close()
+    }.getOrThrow()
 }
