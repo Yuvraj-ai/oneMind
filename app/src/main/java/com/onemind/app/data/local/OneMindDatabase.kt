@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
+import com.onemind.app.data.local.dao.EventDao
 import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.dao.SearchIndexDao
 import com.onemind.app.data.local.entity.*
@@ -26,9 +27,11 @@ import com.onemind.app.data.local.entity.*
         MemoryCategoryEntity::class,
         MemoryCategorizationEntity::class,
         // Full-text search index (v4)
-        MemorySearchIndexEntity::class
+        MemorySearchIndexEntity::class,
+        // Detected events (v5)
+        DetectedEventEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -37,4 +40,5 @@ abstract class OneMindDatabase : RoomDatabase() {
     abstract fun derivedDataDao(): DerivedDataDao
     abstract fun categoryDao(): CategoryDao
     abstract fun searchIndexDao(): SearchIndexDao
+    abstract fun eventDao(): EventDao
 }

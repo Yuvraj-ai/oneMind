@@ -216,15 +216,20 @@ private fun ProcessingStatusRow(
 /**
  * Extract a text snippet from the memory's content blocks.
  *
- * Prefers the pipeline's summary, which says what the Memory is *about* and is
- * far more use at a glance than its opening words. Falls back to raw content when
- * there is no summary — not processed yet, no provider configured, or nothing
- * worth summarising.
+ * Hierarchy: title → summary → raw content opening. The title says what the Memory
+ * *is called*; the summary says what it is *about*; the raw content is the last
+ * resort when enrichment hasn't run yet or no provider is configured.
  */
 private fun getTextSnippet(memory: Memory): String {
     val summary = memory.derived.summary
-    if (summary?.status == StageStatus.SUCCESS && summary.summaryText.isNotBlank()) {
-        return summary.summaryText
+    if (summary?.status == StageStatus.SUCCESS) {
+        // Title + summary together, if both exist.
+        val title = summary.title
+        if (title != null && summary.summaryText.isNotBlank()) {
+            return "$title — ${summary.summaryText}"
+        }
+        if (title != null) return title
+        if (summary.summaryText.isNotBlank()) return summary.summaryText
     }
 
     val textBlock = memory.contentBlocks.firstOrNull { it.type == ContentType.TEXT }

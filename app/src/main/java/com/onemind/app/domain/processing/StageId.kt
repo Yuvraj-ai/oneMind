@@ -17,6 +17,7 @@ enum class StageId {
     OCR,
     VISION,
     METADATA,
+    EVENT_DETECTION,
     EMBEDDING,
     CATEGORIZATION,
     SUMMARIZATION,

@@ -5,6 +5,7 @@ package com.onemind.app.ui.navigation
  */
 object NavRoutes {
     const val FEED = "feed"
+    const val EVENTS = "events"
     const val COMPOSER = "composer"
     const val COMPOSER_EDIT = "composer/{memoryId}"
     const val MEMORY_DETAIL = "memory/{memoryId}"

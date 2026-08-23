@@ -121,6 +121,8 @@ data class ExtractedEntity(
 data class MemorySummary(
     val memoryId: Long,
     val summaryText: String,
+    /** A 3-8 word heading. The summary says what it's about; the title is what you call it. */
+    val title: String? = null,
     val status: StageStatus = StageStatus.SUCCESS,
     val generatedAt: Instant = Instant.now(),
     val providerModel: String? = null

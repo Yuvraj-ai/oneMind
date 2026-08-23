@@ -12,6 +12,7 @@ import com.onemind.app.domain.processing.TextRecognizer
 import com.onemind.app.domain.processing.stages.EmbeddingStage
 import com.onemind.app.domain.processing.stages.MetadataExtractionStage
 import com.onemind.app.domain.processing.stages.CategorizationStage
+import com.onemind.app.domain.processing.stages.EventDetectionStage
 import com.onemind.app.domain.processing.stages.OcrStage
 import com.onemind.app.domain.processing.stages.SearchIndexStage
 import com.onemind.app.domain.processing.stages.SummarizationStage
@@ -59,6 +60,10 @@ abstract class ProcessingModule {
     @Binds
     @IntoSet
     abstract fun bindCategorizationStage(stage: CategorizationStage): ProcessingStage
+
+    @Binds
+    @IntoSet
+    abstract fun bindEventDetectionStage(stage: EventDetectionStage): ProcessingStage
 
     @Binds
     @IntoSet

@@ -68,6 +68,7 @@ class SummarizationStage @Inject constructor(
                 MemorySummary(
                     memoryId = memory.id,
                     summaryText = "",
+                    title = null,
                     status = StageStatus.EMPTY,
                     providerModel = textGenerator.modelIdentifier()
                 )
@@ -75,10 +76,13 @@ class SummarizationStage @Inject constructor(
             return StageResult.Empty
         }
 
+        val (title, summaryText) = parseResponse(cleaned)
+
         derivedDataRepository.saveSummary(
             MemorySummary(
                 memoryId = memory.id,
-                summaryText = cleaned,
+                summaryText = summaryText,
+                title = title,
                 status = StageStatus.SUCCESS,
                 providerModel = textGenerator.modelIdentifier()
             )
@@ -216,23 +220,59 @@ class SummarizationStage @Inject constructor(
         return """
             Below is a saved memory from someone's personal collection.
 
-            Write one or two sentences saying what it is generally about, so they
-            can recognise it later in a list.
+            Produce TWO things:
+            1. A SHORT TITLE (3-8 words) — what you would call this in a list.
+            2. One or two SENTENCES saying what it is generally about, so they can
+               recognise it later.
+
+            Reply in exactly this format, nothing else:
+            TITLE: <your title here>
+            SUMMARY: <your one or two sentences here>
 
             Rules:
             - Describe the subject as a whole. Do not list the individual items.
             - Use only what is below. Do not infer or invent.
-            - Reply with the sentences only. No preamble, no bullet points, no
-              headings.$truncationNote
+            - No preamble, no bullet points, no headings beyond the two labels.$truncationNote
 
             Memory:
             ${input.text}
         """.trimIndent()
     }
 
+    /**
+     * Parse the "TITLE: ... SUMMARY: ..." format from the model response.
+     *
+     * If the format is not followed, falls back to treating the whole response as a
+     * summary with no title — which is the same result as before title support was
+     * added, so nothing breaks for models that ignore instruction formats.
+     */
+    private fun parseResponse(cleaned: String): Pair<String?, String> {
+        val titleMatch = Regex("""(?i)^TITLE:\s*(.+)""", RegexOption.MULTILINE).find(cleaned)
+        val summaryMatch = Regex("""(?i)^SUMMARY:\s*(.+)""", RegexOption.MULTILINE).find(cleaned)
+
+        if (titleMatch != null && summaryMatch != null) {
+            val title = titleMatch.groupValues[1].trim()
+                .removeSurrounding("\"")
+                .take(MAX_TITLE_LENGTH)
+                .ifBlank { null }
+
+            val summary = summaryMatch.groupValues[1].trim()
+                .removeSurrounding("\"")
+                .ifBlank { cleaned }
+
+            return title to summary
+        }
+
+        // Model didn't follow format — use the whole cleaned text as summary, no title.
+        return null to cleaned
+    }
+
     companion object {
         /** A couple of sentences, with headroom. Discourages an essay. */
         const val MAX_RESPONSE_TOKENS = 256
+
+        /** Title longer than this is not a title, it's a sentence. */
+        private const val MAX_TITLE_LENGTH = 60
 
         /**
          * Matches `<think>...</think>` blocks, including multiline. Models like

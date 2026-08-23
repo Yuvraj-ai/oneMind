@@ -146,6 +146,8 @@ data class ExtractedEntityEntity(
 data class MemorySummaryEntity(
     @PrimaryKey val memoryId: Long,
     val summaryText: String,
+    /** A 3-8 word heading for the Memory, generated alongside the summary. */
+    val title: String? = null,
     val status: StageStatus,
     val generatedAt: Long,
     val providerModel: String?

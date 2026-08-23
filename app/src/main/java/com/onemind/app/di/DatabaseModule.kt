@@ -9,6 +9,7 @@ import com.onemind.app.data.local.Migrations
 import com.onemind.app.data.local.OneMindDatabase
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
+import com.onemind.app.data.local.dao.EventDao
 import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.dao.SearchIndexDao
 import dagger.Module
@@ -60,5 +61,10 @@ object DatabaseModule {
     @Provides
     fun provideSearchIndexDao(database: OneMindDatabase): SearchIndexDao {
         return database.searchIndexDao()
+    }
+
+    @Provides
+    fun provideEventDao(database: OneMindDatabase): EventDao {
+        return database.eventDao()
     }
 }

@@ -62,6 +62,7 @@ object DerivedMapper {
     fun MemorySummaryEntity.toDomain() = MemorySummary(
         memoryId = memoryId,
         summaryText = summaryText,
+        title = title,
         status = status,
         generatedAt = Instant.ofEpochMilli(generatedAt),
         providerModel = providerModel
@@ -125,6 +126,7 @@ object DerivedMapper {
     fun MemorySummary.toEntity() = MemorySummaryEntity(
         memoryId = memoryId,
         summaryText = summaryText,
+        title = title,
         status = status,
         generatedAt = generatedAt.toEpochMilli(),
         providerModel = providerModel

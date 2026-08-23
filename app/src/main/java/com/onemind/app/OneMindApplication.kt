@@ -5,6 +5,8 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.onemind.app.capture.NotificationChannels
 import com.onemind.app.data.ai.ProviderRestorer
+import com.onemind.app.data.events.EventReminderScheduler
+import com.onemind.app.data.local.dao.EventDao
 import com.onemind.app.data.processing.StaleProcessingSweeper
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +30,12 @@ class OneMindApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var staleProcessingSweeper: StaleProcessingSweeper
+
+    @Inject
+    lateinit var eventDao: EventDao
+
+    @Inject
+    lateinit var eventReminderScheduler: EventReminderScheduler
 
     /**
      * Application-lifetime scope for start-up work.
@@ -53,6 +61,10 @@ class OneMindApplication : Application(), Configuration.Provider {
             // this they stay in PROCESSING forever: the card spins, and the retry
             // affordance never appears because retry is offered only for FAILED.
             staleProcessingSweeper.sweep()
+
+            // Expire past-due events and schedule reminders for any new ones.
+            eventDao.expireOverdue(java.time.Instant.now().toEpochMilli())
+            eventReminderScheduler.scheduleAll()
         }
     }
 

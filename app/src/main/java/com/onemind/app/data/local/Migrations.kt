@@ -305,5 +305,48 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    /**
+     * v4 -> v5: add title to summaries and detected_events table.
+     *
+     * Two additive changes:
+     *
+     * - `title` column on `memory_summaries`. Nullable so existing rows are valid
+     *   without backfill — the title is generated on the next reprocessing or on
+     *   new Memories.
+     *
+     * - `detected_events` table. A Memory containing a future date becomes
+     *   event-bearing. The event has its own lifecycle (UPCOMING → EXPIRED) and its
+     *   own reminders, but it is not a separate saved thing — it is a lens on a
+     *   Memory, and deleting the Memory cascades to the event.
+     */
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Add title column to existing summaries.
+            db.execSQL("ALTER TABLE `memory_summaries` ADD COLUMN `title` TEXT DEFAULT NULL")
+
+            // Events table.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `detected_events` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `memoryId` INTEGER NOT NULL,
+                    `eventTime` INTEGER NOT NULL,
+                    `eventTitle` TEXT NOT NULL,
+                    `status` TEXT NOT NULL DEFAULT 'UPCOMING',
+                    `remindersScheduledAt` INTEGER,
+                    FOREIGN KEY(`memoryId`) REFERENCES `memories`(`id`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_detected_events_memoryId` ON `detected_events` (`memoryId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_detected_events_status_eventTime` ON `detected_events` (`status`, `eventTime`)"
+            )
+        }
+    }
+
+    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

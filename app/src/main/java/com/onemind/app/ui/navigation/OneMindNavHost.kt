@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.onemind.app.ui.composer.ComposerScreen
+import com.onemind.app.ui.events.EventsScreen
 import com.onemind.app.ui.feed.FeedScreen
 import com.onemind.app.ui.feed.MemoryDetailScreen
 import com.onemind.app.ui.onboarding.OnboardingScreen
@@ -48,6 +49,17 @@ fun OneMindNavHost(
                 },
                 onNavigateToSettings = {
                     navController.navigate(NavRoutes.SETTINGS)
+                },
+                onNavigateToEvents = {
+                    navController.navigate(NavRoutes.EVENTS)
+                }
+            )
+        }
+
+        composable(NavRoutes.EVENTS) {
+            EventsScreen(
+                onNavigateToMemory = { memoryId ->
+                    navController.navigate(NavRoutes.memoryDetail(memoryId))
                 }
             )
         }
