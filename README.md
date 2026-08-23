@@ -262,8 +262,6 @@ This project was built entirely using [Kiro](https://kiro.dev), AWS's agentic ID
 - Manual upgrade testing on a real device
 - Choosing which review findings to fix now vs defer
 
-The full context prompt for continuing this project in another agent session is at `CLAUDE_CODE_CONTEXT.md` in the workspace root.
-
 ## Contributing
 
 Issues and pull requests are welcome.
