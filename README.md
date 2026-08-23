@@ -122,17 +122,112 @@ Stage order is the declaration order of an enum, so it cannot be got wrong by a 
 | [CONTEXT.md](../CONTEXT.md) | Project glossary — the vocabulary the code uses |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
+## Setup
+
+### Prerequisites
+
+| Tool | Version | Why |
+|------|---------|-----|
+| JDK | 17 (Temurin recommended) | Gradle and the Kotlin compiler |
+| Android SDK | Platform 35 + 36, Build Tools 36.0.0 | compileSdk 36, minSdk 30 |
+| Gradle | 8.13 (wrapper included) | Just use `./gradlew` — no global install needed |
+
+If you're starting fresh on a machine with nothing installed, see [BUILDING.md](BUILDING.md) for the full walkthrough including how to set `JAVA_HOME` and `ANDROID_HOME`.
+
+### Quick start
+
+```bash
+git clone https://github.com/Yuvraj-ai/oneMind.git
+cd oneMind
+
+# Verify everything builds and the Hilt graph is valid
+./gradlew assembleDebug
+
+# Run the unit tests
+./gradlew testDebugUnitTest
+
+# Static analysis
+./gradlew lintDebug
+```
+
+`assembleDebug` is not optional — it is what validates the Hilt dependency injection graph. `compileDebugKotlin` compiles fine even when the DI is broken, and the app crashes at launch.
+
+### Cloud provider setup (optional)
+
+If you want summaries, categories, image descriptions and event detection to work:
+
+1. Get an API key from any OpenAI-compatible provider (OpenAI, Groq, Together, local Ollama)
+2. Launch the app → Onboarding → "Configure a cloud provider"
+3. Enter your base URL, API key, and model name
+
+Without this, capture, OCR, search and browsing all work — only the interpretive features are absent.
+
+### Emulator for instrumented tests
+
+```bash
+# Install an emulator image (one-time)
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "system-images;android-36;google_apis;x86_64"
+
+# Create the AVD
+$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd \
+  -n onemind_test -k "system-images;android-36;google_apis;x86_64" --device "pixel_6"
+
+# Or use the included script:
+./scripts/emulator.fish start
+./gradlew connectedDebugAndroidTest
+./scripts/emulator.fish stop
+```
+
+The release APK is ARM-only (to keep the size at 42MB), so it won't install on an x86 emulator. Debug builds include all ABIs.
+
+---
+
 ## Testing
 
-659 tests: **603 unit** (JVM, including Robolectric) and **56 instrumented** (real device, covering Room migrations, DAO behaviour, ML Kit OCR and the embedding model).
+592 unit tests (JVM, including Robolectric) + 56 instrumented (real device).
 
-Notable coverage, because these are the parts where being wrong is quiet rather than loud:
-- Every migration, individually and chained, asserting existing memories survive
-- A parity test proving the migration's backfill SQL and the Kotlin indexer agree on what text is searchable — two implementations of one rule that would otherwise drift silently
-- A generative test over 400 randomised model replies asserting assigned categories are always a subset of the shipped vocabulary
-- Temporal parsing across year boundaries, leap years, midnight, and timezones, with a fixed clock so results do not depend on when CI runs
+### Running tests
 
-**Not covered:** the MediaProjection screen-capture flow end to end. An emulator cannot grant capture consent non-interactively. The frame arithmetic behind it is thoroughly tested; the capture session itself needs a manual run on a device.
+```bash
+# Unit tests (fast, no device needed)
+./gradlew testDebugUnitTest
+
+# Instrumented tests (needs a running emulator or device)
+./scripts/emulator.fish start
+./gradlew connectedDebugAndroidTest
+./scripts/emulator.fish stop
+
+# Both + lint + build in one shot
+./gradlew testDebugUnitTest assembleDebug lintDebug
+```
+
+### What the tests cover
+
+| Area | What's tested | Why it matters |
+|------|---------------|----------------|
+| Room migrations | Every hop individually + full v1→v5 chain | A migration bug destroys user data |
+| Backfill parity | SQL backfill vs Kotlin indexer produce the same terms | Two implementations of one rule that would otherwise drift silently |
+| Category vocabulary | 400 randomised model replies → assigned set always subset of dictionary | The controlled-vocabulary invariant is the whole point of categorization |
+| Temporal parsing | Year boundaries, leap years, midnight, timezone divergence | Each has a wrong answer that still returns *something* |
+| FTS query safety | Every FTS4 syntax character that could crash on a keystroke | `don't`, `C++`, `AI OR ML` are normal queries that are syntax errors raw |
+| Keyword scoring | Prefix matching mirrors FTS, coverage beats repetition | A row found by the index but scored 0 by our code is the worst bug |
+| Processing state machine | Stuck PROCESSING is recoverable, cancellation doesn't swallow | The pre-fix bug was unrecoverable without clearing app data |
+| Embedding model | Downloads, loads, produces vectors, survives unload/reload | Instrumented — the native model must actually work |
+
+### What's NOT tested
+
+- **Screen capture end-to-end** — an emulator cannot grant accessibility consent non-interactively
+- **UI behaviour** — no Compose test rules; verified by inspection only
+- **Cloud provider integration** — all tests mock `TextGenerator`; no test hits a real API
+- **Real FTS4 queries from `FtsQuery.build`** — tokenisation mismatch between the code and SQLite's `simple` tokenizer was caught by review, not by a test (fix shipped, but no instrumented test pins it)
+
+### Adding tests
+
+Unit tests go in `app/src/test/java/com/onemind/app/`. Instrumented tests go in `app/src/androidTest/java/com/onemind/app/`.
+
+If you're testing something that touches real Android framework (notifications, clipboard, PackageManager), use Robolectric (`@RunWith(RobolectricTestRunner::class)`) — it's already a dependency.
+
+If you're testing Room migrations or anything that needs a real SQLite, use the instrumented suite with `MigrationTestHelper`.
 
 ## Known issues
 
