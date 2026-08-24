@@ -195,9 +195,6 @@ class FeedViewModel @Inject constructor(
         _uiState.update { it.copy(memoryToDelete = null) }
 
         viewModelScope.launch {
-            // Stop any queued enrichment for a Memory that is going away.
-            processingScheduler.cancel(memory.id)
-
             // Delete associated image files
             val imagePaths = memory.contentBlocks
                 .filter { it.type == ContentType.IMAGE }
@@ -208,7 +205,9 @@ class FeedViewModel @Inject constructor(
                 imageFileStorage.deleteImages(imagePaths)
             }
 
-            // Delete the memory from database
+            // Delete the memory from database. This is also what stops its queued
+            // enrichment and reminders: the repository owns that cleanup, so the
+            // composer's delete path gets it too.
             memoryRepository.deleteMemory(memory.id)
         }
     }

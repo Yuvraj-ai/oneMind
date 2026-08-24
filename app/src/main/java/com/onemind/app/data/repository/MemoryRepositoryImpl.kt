@@ -9,6 +9,7 @@ import com.onemind.app.data.local.entity.CategoryMapper
 import com.onemind.app.data.local.entity.DerivedMapper
 import com.onemind.app.data.local.entity.EntityMapper.toDomain
 import com.onemind.app.data.local.entity.EntityMapper.toEntity
+import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.domain.model.Category
 import com.onemind.app.domain.model.DerivedData
 import com.onemind.app.domain.model.Memory
@@ -27,7 +28,8 @@ class MemoryRepositoryImpl @Inject constructor(
     private val derivedDataDao: DerivedDataDao,
     private val categoryDao: CategoryDao,
     private val searchIndexDao: SearchIndexDao,
-    private val eventReminderScheduler: EventReminderScheduler
+    private val eventReminderScheduler: EventReminderScheduler,
+    private val processingScheduler: ProcessingScheduler
 ) : MemoryRepository {
 
     /**
@@ -157,6 +159,12 @@ class MemoryRepositoryImpl @Inject constructor(
         // removes a Memory the user has emptied out, and that Memory can have been
         // enriched and have events.
         eventReminderScheduler.cancelForMemory(id)
+
+        // And the enrichment that has not run yet, for the same reason. Cancelling
+        // before the row goes closes the race the other order leaves open: a worker
+        // that starts in the gap enriches a Memory on its way out and writes derived
+        // rows against an id that is about to disappear.
+        processingScheduler.cancel(id)
 
         memoryDao.deleteMemory(id)
     }

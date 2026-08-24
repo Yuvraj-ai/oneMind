@@ -41,8 +41,11 @@ interface MemoryRepository {
 
     /**
      * Delete a Memory and everything that belongs only to it: its content blocks,
-     * its derived data, its search index row, and any reminders still queued for
-     * events detected in it.
+     * its derived data, its search index row, any reminders still queued for events
+     * detected in it, and any enrichment queued for it that has not run.
+     *
+     * The last three do not cascade — two are not rows at all — so this is the one
+     * seam that gets them, and every delete path goes through here.
      *
      * Callers are responsible for cleaning up image files separately
      * via [ImageFileStorage].

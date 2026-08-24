@@ -19,6 +19,7 @@ import com.onemind.app.data.events.EventReminderScheduler
 import com.onemind.app.data.local.OneMindDatabase
 import com.onemind.app.data.local.entity.ContentBlockEntity
 import com.onemind.app.data.local.entity.MemoryEntity
+import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.data.processing.ProcessingWorker
 import com.onemind.app.data.repository.DerivedDataRepositoryImpl
 import com.onemind.app.data.repository.EventRepositoryImpl
@@ -108,7 +109,8 @@ class EventDetectionToReminderTest {
             database.derivedDataDao(),
             database.categoryDao(),
             database.searchIndexDao(),
-            scheduler
+            scheduler,
+            mockk<ProcessingScheduler>(relaxed = true)
         )
         val derivedDataRepository = DerivedDataRepositoryImpl(
             database.derivedDataDao(),

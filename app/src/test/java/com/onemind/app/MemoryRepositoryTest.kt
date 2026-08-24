@@ -8,6 +8,7 @@ import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.ContentBlockEntity
 import com.onemind.app.data.local.entity.MemoryEntity
 import com.onemind.app.data.local.entity.MemoryWithBlocks
+import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.data.repository.MemoryRepositoryImpl
 import com.onemind.app.domain.model.*
 import com.onemind.app.domain.repository.InvalidStateTransitionException
@@ -27,6 +28,7 @@ class MemoryRepositoryTest {
     private lateinit var categoryDao: CategoryDao
     private lateinit var searchIndexDao: SearchIndexDao
     private lateinit var eventReminderScheduler: EventReminderScheduler
+    private lateinit var processingScheduler: ProcessingScheduler
     private lateinit var repository: MemoryRepositoryImpl
 
     @Before
@@ -36,8 +38,10 @@ class MemoryRepositoryTest {
         categoryDao = mockk(relaxed = true)
         searchIndexDao = mockk(relaxed = true)
         eventReminderScheduler = mockk(relaxed = true)
+        processingScheduler = mockk(relaxed = true)
         repository = MemoryRepositoryImpl(
-            memoryDao, derivedDataDao, categoryDao, searchIndexDao, eventReminderScheduler
+            memoryDao, derivedDataDao, categoryDao, searchIndexDao,
+            eventReminderScheduler, processingScheduler
         )
     }
 
@@ -61,6 +65,19 @@ class MemoryRepositoryTest {
         repository.deleteMemory(7L)
 
         verify { eventReminderScheduler.cancelForMemory(7L) }
+    }
+
+    @Test
+    fun `deleting a memory also cancels its queued enrichment`() = runTest {
+        // The third thing that does not cascade, and the last one that was still
+        // being cleaned up in a ViewModel instead. The composer deletes a Memory the
+        // user has emptied out and used to leave its enrichment queued: the worker
+        // would start on a Memory that no longer exists, or — the race that actually
+        // costs something — start just before the delete lands and write derived rows
+        // against an id on its way out.
+        repository.deleteMemory(7L)
+
+        verify { processingScheduler.cancel(7L) }
     }
 
     @Test
