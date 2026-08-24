@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.Handler
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import com.onemind.app.data.processing.ProcessingScheduler
@@ -64,11 +65,15 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
-     * The last foreground package we observed. Updated on every window-state change.
-     * Read at capture time to tag the Memory with which app was being used.
+     * Which window is in front, and whether it is the notification shade.
+     *
+     * Created lazily rather than in a field initialiser because `packageName` is a
+     * `Context` method and is not safe to call before the service is attached.
      */
-    @Volatile
-    private var foregroundPackage: String? = null
+    private val shadeTracker by lazy { ShadeTracker(ownPackage = packageName) }
+
+    /** Posts the shade-collapse backstop. Created once, on the main looper. */
+    private val handler by lazy { Handler(mainLooper) }
 
     override fun onServiceConnected() {
         serviceInfo = AccessibilityServiceInfo().apply {
@@ -82,12 +87,7 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            event.packageName?.toString()?.let { pkg ->
-                // Don't record ourselves as the foreground app.
-                if (pkg != packageName) {
-                    foregroundPackage = pkg
-                }
-            }
+            event.packageName?.toString()?.let(shadeTracker::onWindowStateChanged)
         }
     }
 
@@ -96,21 +96,56 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     /**
      * Triggered by the QS tile (via startService). Takes one screenshot and saves it.
      *
-     * A delay is inserted before capturing because the tile's onClick fires while
-     * the notification shade is still visible. The shade collapses automatically
-     * after onClick returns, but the animation takes ~300-500ms. Without the delay,
-     * the screenshot captures the shade rather than the app underneath — which is
-     * exactly the bug that prompted this fix.
+     * ## Why this is not just a delay
+     *
+     * The previous version posted the capture behind a fixed 500ms and explained it
+     * as waiting out the shade's collapse animation. The shade was not collapsing.
+     * `TileService.onClick` carries no such contract — only
+     * `startActivityAndCollapse` closes the shade, and that path is used here solely
+     * for the accessibility-settings redirect. So the delay was spent sitting beside
+     * a fully open shade, and `takeScreenshot()` captured it, faithfully.
+     *
+     * Asking is the fix. `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is available to
+     * an accessibility service and to almost nothing else, which is why this cannot
+     * live in the tile.
+     *
+     * ## Why the delay survives, demoted
+     *
+     * Dismissal is asynchronous and reports nothing. But the shade is a window, so
+     * its departure arrives as a window-state change — the same events this service
+     * already receives, which is how it knew the shade was in front to begin with.
+     * Capture is triggered by that signal, and the 500ms remains only as a backstop
+     * for a device that never sends it. First one wins; [ShadeTracker] guarantees
+     * only one does.
+     *
+     * ## API 30
+     *
+     * `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is API 31. `minSdk` is 30, and
+     * raising it would drop devices for one action, so on API 30 the shade is not
+     * dismissed and the backstop expires into the original behaviour: a screenshot
+     * of the shade. Knowingly unfixed rather than quietly broken.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_TAKE_SCREENSHOT) {
-            // Post with a delay long enough for the shade collapse animation to
-            // finish. 500ms is safe on every device tested; 300ms races on slow ones.
-            android.os.Handler(mainLooper).postDelayed({
-                takeScreenshotNow()
-            }, SHADE_COLLAPSE_DELAY_MS)
+            requestShadeDismissal()
+
+            val capturedSynchronously = shadeTracker.awaitShadeGone(::takeScreenshotNow)
+            if (!capturedSynchronously) {
+                handler.postDelayed({ shadeTracker.onTimeout() }, SHADE_COLLAPSE_TIMEOUT_MS)
+            }
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Ask the system to close the notification shade, if it is open and if this
+     * Android version can be asked.
+     */
+    private fun requestShadeDismissal() {
+        if (!shadeTracker.isShadeInFront) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+
+        performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
     }
 
     private fun takeScreenshotNow() {
@@ -171,8 +206,9 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
                             position = 0
                         )
                     ),
-                    // The app the user was looking at when they tapped the tile.
-                    sourcePackage = foregroundPackage
+                    // The app the user was looking at when they tapped the tile —
+                    // never the notification shade they tapped it from.
+                    sourcePackage = shadeTracker.lastAppPackage
                 )
 
                 val memoryId = memoryRepository.createMemory(memory)
@@ -201,14 +237,15 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
         const val ACTION_TAKE_SCREENSHOT = "com.onemind.app.ACTION_TAKE_SCREENSHOT"
 
         /**
-         * Time to wait for the notification shade to finish collapsing.
+         * How long to wait for the shade's departure before capturing regardless.
          *
-         * The shade animation runs ~300ms on most devices but can be slower on
-         * low-end hardware or with accessibility animations enabled. 500ms is safe
-         * on everything tested. Too short = captures the shade; too long = the user
-         * thinks nothing happened. 500ms is imperceptible as "lag" but enough for
-         * any animation to finish.
+         * This used to be the mechanism and is now the backstop, which is why it
+         * kept its value and changed its name. The window-state change normally
+         * arrives well inside it; when it does, this never fires. When it does not —
+         * an OEM shade under a different package, or API 30 where dismissal cannot
+         * be requested at all — the capture still happens rather than never
+         * happening, and the user gets a picture of the shade instead of silence.
          */
-        private const val SHADE_COLLAPSE_DELAY_MS = 500L
+        private const val SHADE_COLLAPSE_TIMEOUT_MS = 500L
     }
 }
