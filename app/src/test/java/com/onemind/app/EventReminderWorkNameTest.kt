@@ -6,7 +6,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * The identity a reminder job is enqueued under.
+ * The identities a reminder job carries: the name it is enqueued under, and the
+ * tags it can later be found by.
  *
  * Small surface, and the only part of the scheduler that can be tested without a
  * device — but it is where the duplicate-notification bug lives. Reminders are
@@ -67,5 +68,34 @@ class EventReminderWorkNameTest {
         }
 
         assertEquals(allIds.size, allIds.toSet().size)
+    }
+
+    @Test
+    fun `a memory's reminders are tagged by its own id`() {
+        assertEquals(
+            EventReminderScheduler.memoryTag(9),
+            EventReminderScheduler.memoryTag(9)
+        )
+        assertNotEquals(
+            EventReminderScheduler.memoryTag(9),
+            EventReminderScheduler.memoryTag(10)
+        )
+    }
+
+    @Test
+    fun `a memory tag is never something an event is enqueued under`() {
+        // Cancelling on delete matches this tag as a string, and it shares the
+        // "event_reminder_" namespace with the per-event identities. If the two could
+        // ever produce the same string, throwing away one Memory would silently
+        // cancel an unrelated event's reminders — a missing notification, which is
+        // the failure mode nobody reports.
+        val eventNames = (1L..1_000L).flatMap { id ->
+            ReminderLead.entries.map { EventReminderScheduler.uniqueWorkName(id, it) }
+        }.toSet()
+
+        val memoryTags = (1L..1_000L).map { EventReminderScheduler.memoryTag(it) }
+
+        assertTrue(memoryTags.none { it in eventNames })
+        assertEquals(memoryTags.size, memoryTags.toSet().size)
     }
 }

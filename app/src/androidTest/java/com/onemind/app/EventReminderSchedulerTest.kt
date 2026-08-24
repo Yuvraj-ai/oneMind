@@ -75,15 +75,7 @@ class EventReminderSchedulerTest {
 
         // Events have an FK to a Memory, and the whole point of an event is that it
         // is a lens on one, so there is no such thing as a standalone fixture here.
-        memoryId = memoryDao.insertMemoryWithBlocks(
-            MemoryEntity(
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis(),
-                sourceType = SourceType.MANUAL,
-                processingState = ProcessingState.SAVED
-            ),
-            emptyList()
-        )
+        memoryId = newMemory()
     }
 
     @After
@@ -91,15 +83,26 @@ class EventReminderSchedulerTest {
         database.close()
     }
 
-    /** An event [ahead] from now, with no reminders scheduled yet. */
-    private suspend fun insertEvent(ahead: Duration): Long = eventDao.insert(
-        DetectedEventEntity(
-            memoryId = memoryId,
-            eventTime = Instant.now().plus(ahead).toEpochMilli(),
-            eventTitle = "AI Summit",
-            remindersScheduledAt = null
-        )
+    private suspend fun newMemory(): Long = memoryDao.insertMemoryWithBlocks(
+        MemoryEntity(
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            sourceType = SourceType.MANUAL,
+            processingState = ProcessingState.SAVED
+        ),
+        emptyList()
     )
+
+    /** An event [ahead] from now, with no reminders scheduled yet. */
+    private suspend fun insertEvent(ahead: Duration, ownedBy: Long = memoryId): Long =
+        eventDao.insert(
+            DetectedEventEntity(
+                memoryId = ownedBy,
+                eventTime = Instant.now().plus(ahead).toEpochMilli(),
+                eventTitle = "AI Summit",
+                remindersScheduledAt = null
+            )
+        )
 
     private fun jobsFor(eventId: Long, lead: ReminderLead): List<WorkInfo> =
         workManager.getWorkInfosForUniqueWork(
@@ -170,5 +173,86 @@ class EventReminderSchedulerTest {
 
         assertTrue(jobsFor(eventId, ReminderLead.TWO_DAYS).isEmpty())
         assertEquals(1, jobsFor(eventId, ReminderLead.TWO_HOURS).size)
+    }
+
+    @Test
+    fun cancelForMemory_cancelsBothLeadsOfTheMemorysEvent() = runTest {
+        val eventId = insertEvent(Duration.ofDays(10))
+        scheduler.scheduleAll()
+
+        scheduler.cancelForMemory(memoryId)
+
+        // `single()` rather than a predicate over the list: an empty list would make
+        // any "all cancelled" assertion vacuously true, which is how a cancel that
+        // matched nothing would look like a passing test.
+        assertEquals(
+            WorkInfo.State.CANCELLED,
+            jobsFor(eventId, ReminderLead.TWO_DAYS).single().state
+        )
+        assertEquals(
+            WorkInfo.State.CANCELLED,
+            jobsFor(eventId, ReminderLead.TWO_HOURS).single().state
+        )
+    }
+
+    @Test
+    fun cancelForMemory_cancelsEveryEventThatMemoryHas() = runTest {
+        // One screenshot can mention two dates, so one Memory can own several events.
+        val first = insertEvent(Duration.ofDays(10))
+        val second = insertEvent(Duration.ofDays(20))
+        scheduler.scheduleAll()
+
+        scheduler.cancelForMemory(memoryId)
+
+        // Both events are more than two days out, so all four jobs exist and all four
+        // must go.
+        listOf(first, second).forEach { eventId ->
+            listOf(ReminderLead.TWO_DAYS, ReminderLead.TWO_HOURS).forEach { lead ->
+                assertEquals(
+                    "lead $lead of event $eventId",
+                    WorkInfo.State.CANCELLED,
+                    jobsFor(eventId, lead).single().state
+                )
+            }
+        }
+    }
+
+    @Test
+    fun cancelForMemory_leavesAnotherMemorysRemindersAlone() = runTest {
+        val mine = insertEvent(Duration.ofDays(10))
+        val theirs = insertEvent(Duration.ofDays(10), ownedBy = newMemory())
+        scheduler.scheduleAll()
+
+        scheduler.cancelForMemory(memoryId)
+
+        assertEquals(
+            WorkInfo.State.CANCELLED,
+            jobsFor(mine, ReminderLead.TWO_HOURS).single().state
+        )
+        assertEquals(
+            WorkInfo.State.ENQUEUED,
+            jobsFor(theirs, ReminderLead.TWO_HOURS).single().state
+        )
+    }
+
+    @Test
+    fun cancelForMemory_stillWorksAfterTheEventRowsHaveCascadedAway() = runTest {
+        val eventId = insertEvent(Duration.ofDays(10))
+        scheduler.scheduleAll()
+
+        // This is the order deletion actually happens in: the Memory row goes, the
+        // event rows cascade with it, and only then is there anything to cancel. A
+        // cancel that had to look up "which events did this Memory have" would find
+        // none and silently leave the notifications enqueued — which is precisely
+        // what shipped.
+        memoryDao.deleteMemory(memoryId)
+        assertTrue(eventDao.getEventsForMemory(memoryId).isEmpty())
+
+        scheduler.cancelForMemory(memoryId)
+
+        assertEquals(
+            WorkInfo.State.CANCELLED,
+            jobsFor(eventId, ReminderLead.TWO_HOURS).single().state
+        )
     }
 }

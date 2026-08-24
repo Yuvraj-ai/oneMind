@@ -21,8 +21,8 @@ import javax.inject.Singleton
  * notification that was documented but never sent.
  *
  * Reminders are one-time jobs with an initial delay, so they survive process death
- * and device restart. Tags are per-event so an event's reminders can be cancelled
- * without touching anyone else's.
+ * and device restart. Each carries two tags: one for its event, and one for the
+ * Memory the event was detected in, which is what makes [cancelForMemory] possible.
  */
 @Singleton
 class EventReminderScheduler @Inject constructor(
@@ -41,7 +41,7 @@ class EventReminderScheduler @Inject constructor(
         val now = Instant.now()
 
         unscheduled.forEach { event ->
-            scheduleForEvent(event.id, event.eventTime, event.eventTitle, now)
+            scheduleForEvent(event.id, event.memoryId, event.eventTime, event.eventTitle, now)
             eventDao.markRemindersScheduled(event.id, now.toEpochMilli())
         }
     }
@@ -64,6 +64,7 @@ class EventReminderScheduler @Inject constructor(
      */
     private fun scheduleForEvent(
         eventId: Long,
+        memoryId: Long,
         eventTimeMillis: Long,
         title: String,
         now: Instant
@@ -82,6 +83,7 @@ class EventReminderScheduler @Inject constructor(
                 )
                 .setInitialDelay(reminder.delay.toMillis(), TimeUnit.MILLISECONDS)
                 .addTag(TAG_PREFIX + eventId)
+                .addTag(memoryTag(memoryId))
                 .build()
 
             workManager.enqueueUniqueWork(
@@ -95,9 +97,21 @@ class EventReminderScheduler @Inject constructor(
         }
     }
 
-    /** Cancel all reminders for an event (e.g. when the Memory is deleted). */
-    fun cancelForEvent(eventId: Long) {
-        WorkManager.getInstance(context).cancelAllWorkByTag(TAG_PREFIX + eventId)
+    /**
+     * Drop every reminder belonging to [memoryId], for when that Memory is deleted.
+     *
+     * By tag rather than by lookup, and that is the whole point. A Memory's event
+     * rows cascade away with it, so by the time anything wants to cancel there is
+     * nothing left in the database to ask "which events did this have" — the answer
+     * is always none, and a lookup-based cancel would do nothing while appearing to
+     * work. The tag was written onto the job at enqueue time and outlives the row.
+     *
+     * Its predecessor, `cancelForEvent`, took an event id, was never called from
+     * anywhere, and could not have been called correctly from the one place that
+     * needed it. This is what v0.1.2 meant to have.
+     */
+    fun cancelForMemory(memoryId: Long) {
+        WorkManager.getInstance(context).cancelAllWorkByTag(memoryTag(memoryId))
     }
 
     companion object {
@@ -116,5 +130,15 @@ class EventReminderScheduler @Inject constructor(
          */
         fun uniqueWorkName(eventId: Long, lead: ReminderLead) =
             "$TAG_PREFIX${eventId}_${lead.name}"
+
+        /**
+         * Per-Memory tag, used to cancel every reminder a Memory owns at once.
+         *
+         * Mirrors `ProcessingScheduler.memoryTag`, and deliberately spells out
+         * `memory` so it cannot collide with the per-event tag or with anything
+         * [uniqueWorkName] produces — those interpolate a number where this has a
+         * word.
+         */
+        fun memoryTag(memoryId: Long) = "${TAG_PREFIX}memory_$memoryId"
     }
 }

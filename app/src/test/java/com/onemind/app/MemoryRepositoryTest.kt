@@ -1,5 +1,6 @@
 package com.onemind.app
 
+import com.onemind.app.data.events.EventReminderScheduler
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.SearchIndexDao
@@ -25,6 +26,7 @@ class MemoryRepositoryTest {
     private lateinit var derivedDataDao: DerivedDataDao
     private lateinit var categoryDao: CategoryDao
     private lateinit var searchIndexDao: SearchIndexDao
+    private lateinit var eventReminderScheduler: EventReminderScheduler
     private lateinit var repository: MemoryRepositoryImpl
 
     @Before
@@ -33,8 +35,9 @@ class MemoryRepositoryTest {
         derivedDataDao = mockk(relaxed = true)
         categoryDao = mockk(relaxed = true)
         searchIndexDao = mockk(relaxed = true)
+        eventReminderScheduler = mockk(relaxed = true)
         repository = MemoryRepositoryImpl(
-            memoryDao, derivedDataDao, categoryDao, searchIndexDao
+            memoryDao, derivedDataDao, categoryDao, searchIndexDao, eventReminderScheduler
         )
     }
 
@@ -47,6 +50,17 @@ class MemoryRepositoryTest {
 
         coVerify { searchIndexDao.delete(7L) }
         coVerify { memoryDao.deleteMemory(7L) }
+    }
+
+    @Test
+    fun `deleting a memory also cancels its pending reminders`() = runTest {
+        // Same class of problem as the search index row above: WorkManager jobs are
+        // not in the database, so no foreign key reaches them. v0.1.2 deleted the
+        // Memory and left its reminders enqueued, and one of them would later fire a
+        // notification about a Memory the user had thrown away.
+        repository.deleteMemory(7L)
+
+        verify { eventReminderScheduler.cancelForMemory(7L) }
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.onemind.app.data.repository
 
+import com.onemind.app.data.events.EventReminderScheduler
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
@@ -25,7 +26,8 @@ class MemoryRepositoryImpl @Inject constructor(
     private val memoryDao: MemoryDao,
     private val derivedDataDao: DerivedDataDao,
     private val categoryDao: CategoryDao,
-    private val searchIndexDao: SearchIndexDao
+    private val searchIndexDao: SearchIndexDao,
+    private val eventReminderScheduler: EventReminderScheduler
 ) : MemoryRepository {
 
     /**
@@ -146,6 +148,16 @@ class MemoryRepositoryImpl @Inject constructor(
         // alone, the deleted Memory's text stays matchable — a privacy problem, and
         // one that also crowds genuine matches out of the query's LIMIT.
         searchIndexDao.delete(id)
+
+        // Reminders are the same shape of problem one step further out: they are not
+        // rows at all, so nothing in the database can reach them. v0.1.2 deleted the
+        // Memory and left them queued, and days later one would fire a notification
+        // about something the user had already thrown away. Cancelling here rather
+        // than at the delete button covers the other delete path too — the composer
+        // removes a Memory the user has emptied out, and that Memory can have been
+        // enriched and have events.
+        eventReminderScheduler.cancelForMemory(id)
+
         memoryDao.deleteMemory(id)
     }
 

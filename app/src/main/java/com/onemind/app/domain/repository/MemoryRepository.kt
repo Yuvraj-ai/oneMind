@@ -40,7 +40,10 @@ interface MemoryRepository {
     suspend fun updateMemory(memory: Memory)
 
     /**
-     * Delete a Memory and all associated content blocks.
+     * Delete a Memory and everything that belongs only to it: its content blocks,
+     * its derived data, its search index row, and any reminders still queued for
+     * events detected in it.
+     *
      * Callers are responsible for cleaning up image files separately
      * via [ImageFileStorage].
      */
