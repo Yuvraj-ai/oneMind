@@ -1461,12 +1461,12 @@ Append inside `SharedComponentsTest`:
                 // emulator whose screen is narrower than 440 dp and would otherwise make
                 // this pass without the frame doing anything.
                 Box(modifier = Modifier.requiredWidth(800.dp)) {
-                    com.onemind.app.ui.components.PhoneFrame {
+                    PhoneFrame {
                         Box(
                             modifier = Modifier
                                 .testTag("framed")
-                                .androidx.compose.foundation.layout.fillMaxWidth()
-                                .androidx.compose.foundation.layout.height(40.dp)
+                                .fillMaxWidth()
+                                .height(40.dp)
                         )
                     }
                 }
@@ -1486,7 +1486,7 @@ Append inside `SharedComponentsTest`:
     fun theHeroShowsItsEyebrowAndTitle() {
         composeRule.setContent {
             OneMindTheme {
-                com.onemind.app.ui.components.HeroHeader(
+                HeroHeader(
                     eyebrow = "Your mind",
                     title = "Everything you saved"
                 )
@@ -1508,7 +1508,7 @@ Append inside `SharedComponentsTest`:
         }
         composeRule.setContent {
             OneMindTheme {
-                com.onemind.app.ui.components.HeroHeader(
+                HeroHeader(
                     eyebrow = "Your mind",
                     title = "Everything you saved"
                 )
@@ -1530,6 +1530,7 @@ Append inside `SharedComponentsTest`:
                 "and this test would pass for the wrong reason",
             statusBarDp > 0f
         )
+        // "YOUR MIND", not "Your mind": HeroHeader uppercases the eyebrow.
         val eyebrowTop = composeRule.onNodeWithText("YOUR MIND").getBoundsInRoot().top
         assertTrue(
             "eyebrow starts at ${eyebrowTop.value}dp, inside the ${statusBarDp}dp status bar",
@@ -1539,11 +1540,11 @@ Append inside `SharedComponentsTest`:
 
     @Test
     fun theSectionNavReportsWhatWasTapped() {
-        var selected = com.onemind.app.ui.components.SectionDestination.FEED
+        var selected = SectionDestination.FEED
         composeRule.setContent {
             OneMindTheme {
-                com.onemind.app.ui.components.SectionNav(
-                    selected = com.onemind.app.ui.components.SectionDestination.FEED,
+                SectionNav(
+                    selected = SectionDestination.FEED,
                     onSelect = { selected = it }
                 )
             }
@@ -1552,21 +1553,27 @@ Append inside `SharedComponentsTest`:
         composeRule.onNodeWithText("Timeline").performClick()
         composeRule.waitForIdle()
 
-        assertEquals(com.onemind.app.ui.components.SectionDestination.TIMELINE, selected)
+        assertEquals(SectionDestination.TIMELINE, selected)
     }
 ```
 
-Add the imports `androidx.compose.foundation.layout.fillMaxWidth`,
-`androidx.compose.foundation.layout.height`, `androidx.compose.ui.test.performClick`,
-`androidx.activity.enableEdgeToEdge`, `androidx.core.view.ViewCompat`,
-`androidx.core.view.WindowInsetsCompat`, and replace the fully-qualified references above
-with proper imports — `com.onemind.app.ui.components.HeroHeader`, `.PhoneFrame`,
-`.SectionNav`, `.SectionDestination` — once they exist. They are spelled out here only so
-the snippet is unambiguous about which symbol is meant.
+These three tests need these imports added to the file's import block:
 
-The inset test asserts on `"YOUR MIND"` rather than `"Your mind"` because [HeroHeader]
-uppercases the eyebrow. The status-bar guard mirrors `EventsScreenTest`'s: without it, a
-device reporting no inset would pass the overlap assertion for the wrong reason.
+```kotlin
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.test.performClick
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.onemind.app.ui.components.HeroHeader
+import com.onemind.app.ui.components.PhoneFrame
+import com.onemind.app.ui.components.SectionDestination
+import com.onemind.app.ui.components.SectionNav
+```
+
+The status-bar guard mirrors `EventsScreenTest`'s: without it, a device reporting no inset
+would pass the overlap assertion for the wrong reason.
 
 - [ ] **Step 2: Run them and watch them fail**
 
