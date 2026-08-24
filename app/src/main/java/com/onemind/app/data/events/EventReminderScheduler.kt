@@ -3,27 +3,25 @@ package com.onemind.app.data.events
 import android.content.Context
 import androidx.work.*
 import com.onemind.app.data.local.dao.EventDao
+import com.onemind.app.domain.events.ReminderPlanner
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Schedules reminder notifications for detected events.
+ * Turns the reminders an event has earned into WorkManager jobs.
  *
- * Two reminders per event:
- * - 2 days before the event time
- * - 2 hours before the event time
+ * Deliberately thin, in the same spirit as `ProcessingWorker`: *which* reminders an
+ * event gets, and how long until each fires, is decided by [ReminderPlanner], which
+ * is pure and unit-tested. This class knows only how to enqueue what it is handed.
+ * The two used to be one, and the seam is why v0.1.2 could ship a "happening soon"
+ * notification that was documented but never sent.
  *
- * If the event is less than 2 days away when detected, only the 2-hour reminder
- * is scheduled. If it's less than 2 hours away, only a "happening soon" is shown
- * immediately.
- *
- * Reminders are WorkManager one-time jobs with initial delay, so they survive
- * process death and device restart. Tags are per-event so they can be cancelled
- * individually if the event is removed.
+ * Reminders are one-time jobs with an initial delay, so they survive process death
+ * and device restart. Tags are per-event so an event's reminders can be cancelled
+ * without touching anyone else's.
  */
 @Singleton
 class EventReminderScheduler @Inject constructor(
@@ -47,55 +45,32 @@ class EventReminderScheduler @Inject constructor(
         }
     }
 
+    /**
+     * Enqueue whatever [ReminderPlanner] says this event has earned.
+     *
+     * An event can legitimately earn nothing — it is past, or so close that a
+     * notification would land in the same breath as the save. That case enqueues
+     * no work and is not an error.
+     */
     private fun scheduleForEvent(
         eventId: Long,
         eventTimeMillis: Long,
         title: String,
         now: Instant
     ) {
-        val eventTime = Instant.ofEpochMilli(eventTimeMillis)
         val workManager = WorkManager.getInstance(context)
 
-        val twoDaysBefore = eventTime.minus(Duration.ofDays(2))
-        val twoHoursBefore = eventTime.minus(Duration.ofHours(2))
-
-        val data = workDataOf(
-            EventReminderWorker.KEY_EVENT_ID to eventId,
-            EventReminderWorker.KEY_EVENT_TITLE to title,
-            EventReminderWorker.KEY_EVENT_TIME to eventTimeMillis
-        )
-
-        // 2-day reminder
-        if (twoDaysBefore.isAfter(now)) {
-            val delay = Duration.between(now, twoDaysBefore).toMillis()
+        ReminderPlanner.plan(Instant.ofEpochMilli(eventTimeMillis), now).forEach { reminder ->
             val request = OneTimeWorkRequestBuilder<EventReminderWorker>()
                 .setInputData(
                     workDataOf(
                         EventReminderWorker.KEY_EVENT_ID to eventId,
                         EventReminderWorker.KEY_EVENT_TITLE to title,
                         EventReminderWorker.KEY_EVENT_TIME to eventTimeMillis,
-                        EventReminderWorker.KEY_REMINDER_TYPE to "2_DAYS"
+                        EventReminderWorker.KEY_REMINDER_TYPE to reminder.lead.name
                     )
                 )
-                .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                .addTag(TAG_PREFIX + eventId)
-                .build()
-            workManager.enqueue(request)
-        }
-
-        // 2-hour reminder
-        if (twoHoursBefore.isAfter(now)) {
-            val delay = Duration.between(now, twoHoursBefore).toMillis()
-            val request = OneTimeWorkRequestBuilder<EventReminderWorker>()
-                .setInputData(
-                    workDataOf(
-                        EventReminderWorker.KEY_EVENT_ID to eventId,
-                        EventReminderWorker.KEY_EVENT_TITLE to title,
-                        EventReminderWorker.KEY_EVENT_TIME to eventTimeMillis,
-                        EventReminderWorker.KEY_REMINDER_TYPE to "2_HOURS"
-                    )
-                )
-                .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                .setInitialDelay(reminder.delay.toMillis(), TimeUnit.MILLISECONDS)
                 .addTag(TAG_PREFIX + eventId)
                 .build()
             workManager.enqueue(request)

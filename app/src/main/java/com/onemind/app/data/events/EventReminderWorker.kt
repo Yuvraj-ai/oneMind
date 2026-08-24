@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.onemind.app.capture.CaptureNotifier
+import com.onemind.app.domain.events.ReminderLead
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.time.Instant
@@ -15,8 +16,9 @@ import java.time.format.FormatStyle
 /**
  * Posts a reminder notification for an upcoming event.
  *
- * Fired by WorkManager at the scheduled time (2 days before, then 2 hours before).
- * The notification opens the Memory the event was detected from.
+ * Fired by WorkManager at the time [ReminderLead] named: two days out, two hours
+ * out, or immediately for an event too close for either lead to still be ahead of
+ * it. The notification opens the Memory the event was detected from.
  */
 @HiltWorker
 class EventReminderWorker @AssistedInject constructor(
@@ -28,14 +30,14 @@ class EventReminderWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val title = inputData.getString(KEY_EVENT_TITLE) ?: return Result.failure()
         val eventTime = inputData.getLong(KEY_EVENT_TIME, 0L)
-        val reminderType = inputData.getString(KEY_REMINDER_TYPE) ?: "2_HOURS"
-        val eventId = inputData.getLong(KEY_EVENT_ID, 0L)
+        val lead = readLead()
 
         val timeStr = formatTime(eventTime)
-        val message = when (reminderType) {
-            "2_DAYS" -> "In 2 days: $title ($timeStr)"
-            "2_HOURS" -> "In 2 hours: $title ($timeStr)"
-            else -> "Upcoming: $title ($timeStr)"
+        val message = when (lead) {
+            ReminderLead.TWO_DAYS -> "In 2 days: $title ($timeStr)"
+            ReminderLead.TWO_HOURS -> "In 2 hours: $title ($timeStr)"
+            ReminderLead.IMMEDIATE -> "Happening soon: $title ($timeStr)"
+            null -> "Upcoming: $title ($timeStr)"
         }
 
         // Use notifyMessage for event reminders (no specific memoryId action needed
@@ -43,6 +45,19 @@ class EventReminderWorker @AssistedInject constructor(
         notifier.notifyMessage(message)
 
         return Result.success()
+    }
+
+    /**
+     * Which lead this job was enqueued for, or null if it cannot be established.
+     *
+     * Null rather than a default, because a wrong lead is a lie about *when* the
+     * event is. It also covers reminders enqueued by v0.1.3, which wrote `"2_DAYS"`
+     * and `"2_HOURS"` before the leads became an enum: those still fire, with the
+     * generic wording, rather than claiming a timing nobody checked.
+     */
+    private fun readLead(): ReminderLead? {
+        val name = inputData.getString(KEY_REMINDER_TYPE) ?: return null
+        return ReminderLead.entries.firstOrNull { it.name == name }
     }
 
     private fun formatTime(epochMillis: Long): String {
