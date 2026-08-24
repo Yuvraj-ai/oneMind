@@ -33,8 +33,16 @@ class EventReminderScheduler @Inject constructor(
     /**
      * Schedule reminders for all upcoming events that don't have them yet.
      *
-     * Called from app start (after the stale-processing sweep) and after each
-     * pipeline run that detects events.
+     * Called from application start, after the stale-processing sweep, and from
+     * `ProcessingWorker` after any pipeline run that completed. Both callers matter:
+     * the worker is what gets a freshly detected event its reminders without waiting
+     * for the app to be restarted, and app start is what repairs anything the worker
+     * could not finish. From v0.1.2 until this was written only app start existed,
+     * while this comment claimed both did, so an event detected in a session that
+     * never ended got nothing.
+     *
+     * Scans every unscheduled event rather than one Memory's, which is what makes it
+     * safe to call from anywhere and what makes app start a repair pass.
      */
     suspend fun scheduleAll() {
         val unscheduled = eventDao.getUnscheduledReminders()
