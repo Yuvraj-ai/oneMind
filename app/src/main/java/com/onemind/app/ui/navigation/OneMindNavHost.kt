@@ -60,7 +60,8 @@ fun OneMindNavHost(
             EventsScreen(
                 onNavigateToMemory = { memoryId ->
                     navController.navigate(NavRoutes.memoryDetail(memoryId))
-                }
+                },
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

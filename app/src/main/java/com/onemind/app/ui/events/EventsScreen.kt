@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,29 +30,72 @@ import java.time.format.FormatStyle
  * "Expired" section at the bottom for history. Each event has an "Add to Calendar"
  * button that exports it via ACTION_INSERT — no permissions needed, the user
  * confirms in their own calendar app.
+ *
+ * The [Scaffold] is not decoration. `MainActivity` calls `enableEdgeToEdge()`, so
+ * every destination owns its own window insets, and a `Scaffold` with a
+ * [TopAppBar] is how every other screen here handles them. Without one this screen
+ * drew its first row under the status bar, on top of the system clock, and had no
+ * back affordance at all — alone among pushed destinations.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventsScreen(
     onNavigateToMemory: (Long) -> Unit,
+    onNavigateBack: () -> Unit,
     viewModel: EventsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    if (uiState.isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Events") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                }
+            )
         }
-        return
-    }
+    ) { paddingValues ->
+        // Every branch is inside the Scaffold, including loading and empty. An early
+        // return would have taken the top bar with it, and with it the way back —
+        // stranding a user who opened Events before saving anything with a date.
+        when {
+            uiState.isLoading -> Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
 
-    if (uiState.upcomingEvents.isEmpty() && uiState.expiredEvents.isEmpty()) {
-        EmptyEventsState()
-        return
-    }
+            uiState.upcomingEvents.isEmpty() && uiState.expiredEvents.isEmpty() ->
+                EmptyEventsState(modifier = Modifier.padding(paddingValues))
 
+            else -> EventList(
+                uiState = uiState,
+                modifier = Modifier.padding(paddingValues),
+                onTapEvent = onNavigateToMemory,
+                onExportToCalendar = { event ->
+                    context.startActivity(viewModel.exportToCalendar(event))
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun EventList(
+    uiState: EventsUiState,
+    modifier: Modifier = Modifier,
+    onTapEvent: (Long) -> Unit,
+    onExportToCalendar: (DetectedEvent) -> Unit
+) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -68,10 +112,8 @@ fun EventsScreen(
                 EventCard(
                     event = event,
                     isExpired = false,
-                    onTap = { onNavigateToMemory(event.memoryId) },
-                    onExportToCalendar = {
-                        context.startActivity(viewModel.exportToCalendar(event))
-                    }
+                    onTap = { onTapEvent(event.memoryId) },
+                    onExportToCalendar = { onExportToCalendar(event) }
                 )
             }
         }
@@ -90,7 +132,7 @@ fun EventsScreen(
                 EventCard(
                     event = event,
                     isExpired = true,
-                    onTap = { onNavigateToMemory(event.memoryId) },
+                    onTap = { onTapEvent(event.memoryId) },
                     onExportToCalendar = null
                 )
             }
@@ -155,9 +197,9 @@ private fun EventCard(
 }
 
 @Composable
-private fun EmptyEventsState() {
+private fun EmptyEventsState(modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
