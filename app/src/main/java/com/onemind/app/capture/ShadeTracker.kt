@@ -25,12 +25,19 @@ package com.onemind.app.capture
  *
  * The question is unnecessary. This capture is triggered by a Quick Settings tile, and
  * reaching that tile means opening the shade — so the shade is open, always, and the
- * dismissal is unconditional. What remains is knowing when it has *gone*, which is a
- * window-state change back to a real app, and that one does arrive: ~240ms after the
- * request, measured on the same device.
+ * dismissal is unconditional. What remains is knowing when it has *gone*, which is
+ * focus returning to the app the capture was armed over, and that one does arrive:
+ * ~240ms after the request, measured on the same device.
  *
- * Not thread-safe by design: every caller is the service's main looper, which is also
- * where the timeout is posted. Adding locks here would suggest a second caller exists.
+ * Returning to *that* app specifically, not merely to some window that is not the
+ * shade. An incoming call, an alarm or an activity launched from a tapped notification
+ * can take focus inside that 240ms window, and treating it as the shade's departure
+ * both captures early and attributes the Memory to the wrong app.
+ *
+ * Not thread-safe by design, with one exception: [capturedAppPackage] is written on the
+ * main looper and read from the IO dispatcher that persists the Memory, so it is
+ * `@Volatile`. Everything else is main-looper only, including the posted timeout.
+ * Adding locks here would suggest a second caller exists.
  */
 class ShadeTracker(private val ownPackage: String) {
 
@@ -46,6 +53,20 @@ class ShadeTracker(private val ownPackage: String) {
         private set
 
     /**
+     * The app the current capture belongs to: whatever was in front when it was armed.
+     *
+     * Latched rather than read live at persist time, because a window that steals focus
+     * during the shade's collapse would otherwise become the Memory's `sourcePackage` —
+     * the same wrong attribution the shade itself used to cause.
+     *
+     * `@Volatile` because the write is on the main looper and the read is on
+     * `Dispatchers.IO`.
+     */
+    @Volatile
+    var capturedAppPackage: String? = null
+        private set
+
+    /**
      * The pending capture, if one is waiting for the shade to close.
      *
      * Nulled before being invoked, never after: that ordering is what makes the latch
@@ -53,6 +74,16 @@ class ShadeTracker(private val ownPackage: String) {
      * `takeScreenshot()` calls for one tile tap would persist two Memories.
      */
     private var pendingCapture: (() -> Unit)? = null
+
+    /**
+     * The package whose return to the foreground means the shade has gone.
+     *
+     * Null when nothing was in front at arm time — a cold service, or a capture from
+     * the launcher before any app window was seen. In that case the first non-shade
+     * window is taken to be the revealed app, because there is nothing better to wait
+     * for and the alternative is always falling through to the backstop.
+     */
+    private var expectedPackage: String? = null
 
     fun onWindowStateChanged(pkg: String) {
         when (pkg) {
@@ -65,7 +96,16 @@ class ShadeTracker(private val ownPackage: String) {
             }
             else -> {
                 lastAppPackage = pkg
-                fireIfArmed()
+                if (expectedPackage == null) {
+                    // Nothing was in front when this was armed, so this window is the
+                    // best answer available to "which app is the user in".
+                    if (pendingCapture != null) capturedAppPackage = pkg
+                    fireIfArmed()
+                } else if (expectedPackage == pkg) {
+                    fireIfArmed()
+                }
+                // Any other app taking focus mid-collapse is not the shade leaving.
+                // The backstop covers the case where the expected app never returns.
             }
         }
     }
@@ -80,8 +120,14 @@ class ShadeTracker(private val ownPackage: String) {
      * [onReady] is responsible for honouring [settleDelayMs] before it actually grabs
      * a frame; this class decides *how long*, not *how to wait*, because posting a
      * delayed message needs a looper and nothing here needs Android.
+     *
+     * Arming over an already-armed capture replaces it rather than queueing: two taps
+     * inside the collapse window are one intent to capture, and the second tap's frame
+     * is the one the user is looking at.
      */
     fun armCapture(onReady: () -> Unit) {
+        expectedPackage = lastAppPackage
+        capturedAppPackage = lastAppPackage
         pendingCapture = onReady
     }
 
@@ -123,27 +169,33 @@ class ShadeTracker(private val ownPackage: String) {
         const val SYSTEM_UI_PACKAGE = "com.android.systemui"
 
         /**
-         * How long to let the shade finish painting after it stops being in front.
+         * How long to let the shade finish painting after focus has left it.
          *
-         * Measured on the `onemind_test` emulator (API 36), driving the real QS tile
-         * with a real expanded shade:
+         * The focus signal is not the end of the collapse. Measured on the
+         * `onemind_test` emulator (API 36), `TYPE_WINDOW_STATE_CHANGED` back to the
+         * foreground app arrives **~240ms** after
+         * `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is requested, while burst
+         * `screencap` frames taken outside the app still show the panel at ~370ms and
+         * show it gone by ~670ms. Capturing on the signal alone lands inside that
+         * range.
          *
-         * - `TYPE_WINDOW_STATE_CHANGED` back to the foreground app arrives **~240ms**
-         *   after `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is requested. That event
-         *   is *focus transfer*, which happens near the **start** of the collapse.
-         * - The collapse is not visually finished until **~600-700ms** (burst
-         *   `screencap` frames, mean brightness of the top 18% of the frame: open
-         *   shade ~105, app ~248; still 105 at ~370ms, 248 by ~670ms).
+         * 400ms puts the grab at ~640ms, past the observed tail, and lands total
+         * latency at roughly the fixed 500ms the code spent before any of this existed
+         * — so the fix costs the user nothing they were not already paying.
          *
-         * Capturing on the signal alone therefore grabbed the shade mid-fade —
-         * notifications ghosted, QS pills still legible. 400ms bridges the gap
-         * (240 + 400 = ~640ms, past the observed animation tail) and lands total
-         * latency at roughly the fixed 500ms the code spent before any of this
-         * existed, so the fix costs the user nothing they were not already paying.
+         * Two things this value is **not** justified by, both retracted from an earlier
+         * version of this comment: a top-of-frame brightness threshold, which reads a
+         * dark Quick Settings panel on black as *darker* than a settled light app and
+         * so cannot discriminate them; and any claim about what the persisted image
+         * contained before the settle existed. It contained a fully opaque panel,
+         * because no dismissal was being requested at all.
          *
-         * Deliberately not tuned down to the shortest value that happened to work:
-         * the tail is a range, not a point, and a frame arriving one refresh late is
-         * a wrong screenshot rather than a slow one.
+         * What is verified through the app's own capture path: three consecutive tile
+         * taps over Chrome, every saved image inspected and free of the shade.
+         *
+         * Deliberately not tuned down to the shortest value that happened to work: the
+         * tail is a range, not a point, and a frame arriving one refresh late is a
+         * wrong screenshot rather than a slow one.
          */
         const val SHADE_SETTLE_DELAY_MS = 400L
     }

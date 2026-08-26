@@ -75,6 +75,15 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     /** Posts the shade-collapse backstop. Created once, on the main looper. */
     private val handler by lazy { Handler(mainLooper) }
 
+    /**
+     * The backstop itself, held so it can be cancelled.
+     *
+     * One instance rather than a fresh lambda per tap: `removeCallbacks` matches on
+     * identity, so a new lambda each time would be uncancellable and a stale timeout
+     * from one tap could fire the next tap's capture before its settle.
+     */
+    private val backstop = Runnable { shadeTracker.onTimeout() }
+
     override fun onServiceConnected() {
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -96,65 +105,45 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     /**
      * Triggered by the QS tile (via startService). Takes one screenshot and saves it.
      *
-     * ## Why this is not just a delay
+     * The shade is assumed open, because a Quick Settings tile cannot be reached
+     * without opening it, and `TileService.onClick` closes nothing — only
+     * `startActivityAndCollapse` does, and that path is used here solely for the
+     * accessibility-settings redirect. So the dismissal is requested unconditionally.
+     * `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is available to an accessibility
+     * service and to almost nothing else, which is why this cannot live in the tile.
      *
-     * The previous version posted the capture behind a fixed 500ms and explained it
-     * as waiting out the shade's collapse animation. The shade was not collapsing.
-     * `TileService.onClick` carries no such contract — only
-     * `startActivityAndCollapse` closes the shade, and that path is used here solely
-     * for the accessibility-settings redirect. So the delay was spent sitting beside
-     * a fully open shade, and `takeScreenshot()` captured it, faithfully.
+     * Dismissal is asynchronous and reports nothing, so the capture waits for focus to
+     * return to the app it was armed over (~240ms), then for the collapse to finish
+     * painting ([ShadeTracker.settleDelayMs]). The 500ms backstop covers a device that
+     * never sends the signal. First one wins; [ShadeTracker] guarantees only one does.
      *
-     * Asking is the fix. `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is available to
-     * an accessibility service and to almost nothing else, which is why this cannot
-     * live in the tile.
+     * An earlier version gated all of this on detecting that the shade was open, from
+     * `TYPE_WINDOW_STATE_CHANGED`. The shade's arrival is not one of those — on API 36
+     * it produces only `TYPE_WINDOW_CONTENT_CHANGED` — so the gate never opened and the
+     * shade was captured anyway. Widening the event mask is not the alternative: those
+     * events fire on every clock tick, and receiving them would mean receiving the
+     * contents of system windows this service promises not to read. See [ShadeTracker].
      *
-     * ## Why the delay survives, demoted
-     *
-     * Dismissal is asynchronous and reports nothing. But the shade is a window, so
-     * its departure arrives as a window-state change back to the foreground app —
-     * ~240ms after the request, measured. Capture is triggered by that signal, and
-     * the 500ms remains only as a backstop for a device that never sends it. First
-     * one wins; [ShadeTracker] guarantees only one does.
-     *
-     * ## Why nothing checks whether the shade is open
-     *
-     * A previous version did, and the check was always false. The shade's arrival is
-     * not a `TYPE_WINDOW_STATE_CHANGED` — on API 36 it produces only
-     * `TYPE_WINDOW_CONTENT_CHANGED` — so the dismissal was never requested and the
-     * shade was captured anyway, the original bug surviving its own fix. The check is
-     * also unnecessary: this command comes from a Quick Settings tile, and reaching
-     * that tile means the shade is open. So the dismissal is unconditional, and so is
-     * the settle. See [ShadeTracker].
-     *
-     * ## Why the signal alone was not enough either
-     *
-     * The window-state change means *focus* left the shade, which happens near the
-     * start of the collapse animation rather than at its end (~240ms against an
-     * animation still running at ~600-700ms). Capturing on the raw signal produced a
-     * screenshot of the shade mid-fade. So the signal is followed by
-     * [ShadeTracker.settleDelayMs] before the frame is grabbed. The backstop gets the
-     * same settle: a timeout means the shade may still be closing, not that it isn't.
-     *
-     * ## API 30
-     *
-     * `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is API 31. `minSdk` is 30, and
-     * raising it would drop devices for one action, so on API 30 the shade is not
-     * dismissed and the backstop expires into the original behaviour: a screenshot
-     * of the shade. Knowingly unfixed rather than quietly broken.
+     * On API 30 `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` does not exist. `minSdk` is
+     * 30 and raising it would drop devices for one action, so there the backstop expires
+     * into the original behaviour: a screenshot of the shade. Knowingly unfixed rather
+     * than quietly broken.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_TAKE_SCREENSHOT) {
+            // A backstop from a previous tap would otherwise fire this one early.
+            handler.removeCallbacks(backstop)
             // Armed before the request, so the signal cannot arrive unheard.
             shadeTracker.armCapture(::captureAfterSettle)
             requestShadeDismissal()
-            handler.postDelayed({ shadeTracker.onTimeout() }, SHADE_COLLAPSE_TIMEOUT_MS)
+            handler.postDelayed(backstop, SHADE_COLLAPSE_TIMEOUT_MS)
         }
         return START_NOT_STICKY
     }
 
     /** Let the shade finish painting, then grab the frame. */
     private fun captureAfterSettle() {
+        handler.removeCallbacks(backstop)
         handler.postDelayed({ takeScreenshotNow() }, shadeTracker.settleDelayMs())
     }
 
@@ -227,8 +216,9 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
                         )
                     ),
                     // The app the user was looking at when they tapped the tile —
-                    // never the notification shade they tapped it from.
-                    sourcePackage = shadeTracker.lastAppPackage
+                    // never the notification shade they tapped it from, and never a
+                    // window that stole focus while the shade was collapsing.
+                    sourcePackage = shadeTracker.capturedAppPackage
                 )
 
                 val memoryId = memoryRepository.createMemory(memory)

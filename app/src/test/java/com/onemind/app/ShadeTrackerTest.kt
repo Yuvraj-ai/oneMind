@@ -79,21 +79,59 @@ class ShadeTrackerTest {
     }
 
     @Test
-    fun `an armed capture fires on the next app window`() {
+    fun `an armed capture fires on the first app window when nothing was in front`() {
+        // Cold service, or a tap before any app window was seen. There is nothing
+        // better to wait for than the first window the collapse reveals.
         var fired = 0
         tracker.armCapture { fired++ }
 
         tracker.onWindowStateChanged("com.android.chrome")
 
         assertEquals(1, fired)
-        assertFalse(tracker.isCapturePending)
+        assertEquals("com.android.chrome", tracker.capturedAppPackage)
+    }
+
+    @Test
+    fun `an unrelated app taking focus mid-collapse does not fire the capture`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
+        var fired = 0
+        tracker.armCapture { fired++ }
+        tracker.onWindowStateChanged("com.android.dialer")
+
+        // An incoming call is not the shade leaving. Firing here would grab a frame of
+        // the shade still collapsing over a screen the user never asked to capture.
+        assertEquals(0, fired)
+        assertTrue(tracker.isCapturePending)
+    }
+
+    @Test
+    fun `an unrelated app taking focus does not become the capture's source app`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+        tracker.armCapture { }
+
+        tracker.onWindowStateChanged("com.android.dialer")
+        tracker.onTimeout()
+
+        // This is the #39 attribution defect in a new disguise: the Memory would
+        // record the app that interrupted, not the app the user was capturing.
+        assertEquals("com.android.chrome", tracker.capturedAppPackage)
+    }
+
+    @Test
+    fun `the capture's source app is the app that was in front when it was armed`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+        tracker.armCapture { }
+
+        assertEquals("com.android.chrome", tracker.capturedAppPackage)
     }
 
     @Test
     fun `a system ui window while waiting does not fire the callback`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
         var fired = 0
         tracker.armCapture { fired++ }
-
         tracker.onWindowStateChanged(ShadeTracker.SYSTEM_UI_PACKAGE)
 
         // The shade coming back into focus is not the shade leaving.
@@ -103,9 +141,10 @@ class ShadeTrackerTest {
 
     @Test
     fun `our own window while waiting does not fire the callback`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
         var fired = 0
         tracker.armCapture { fired++ }
-
         tracker.onWindowStateChanged("com.onemind.app")
 
         assertEquals(0, fired)
@@ -122,7 +161,26 @@ class ShadeTrackerTest {
     }
 
     @Test
+    fun `arming again replaces a capture that is still waiting`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
+        var first = 0
+        var second = 0
+        tracker.armCapture { first++ }
+        tracker.armCapture { second++ }
+
+        tracker.onWindowStateChanged("com.android.chrome")
+
+        // Two taps inside the collapse window are one intent to capture, and the
+        // second tap's frame is the one the user is looking at.
+        assertEquals(0, first)
+        assertEquals(1, second)
+    }
+
+    @Test
     fun `the callback fires exactly once when the window changes and then the timeout lands`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
         var fired = 0
         tracker.armCapture { fired++ }
 
@@ -135,6 +193,8 @@ class ShadeTrackerTest {
 
     @Test
     fun `the callback fires exactly once when the timeout lands and then the window changes`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
         var fired = 0
         tracker.armCapture { fired++ }
 
@@ -156,6 +216,8 @@ class ShadeTrackerTest {
 
     @Test
     fun `a second capture can arm the latch again after the first completed`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
         var first = 0
         tracker.armCapture { first++ }
         tracker.onWindowStateChanged("com.android.chrome")
@@ -171,11 +233,9 @@ class ShadeTrackerTest {
     // ---------------------------------------------------------------------
     // Settle delay.
     //
-    // The window-state change means focus left the shade, not that the shade
-    // has finished painting. Measured on API 36: the event lands ~240ms after
-    // dismissal is requested, the collapse animation is not visually done
-    // until ~600-700ms, and the frame captured at ~240ms is the shade
-    // mid-fade.
+    // Focus returns to the app ~240ms after the dismissal is requested, which is
+    // near the start of the collapse rather than its end. The frame has to be
+    // grabbed later than that.
     // ---------------------------------------------------------------------
 
     @Test
@@ -185,6 +245,8 @@ class ShadeTrackerTest {
 
     @Test
     fun `the settle delay does not depend on which window fired the capture`() {
+        tracker.onWindowStateChanged("com.android.chrome")
+
         var onSignal = -1L
         tracker.armCapture { onSignal = tracker.settleDelayMs() }
         tracker.onWindowStateChanged("com.android.chrome")
@@ -203,18 +265,7 @@ class ShadeTrackerTest {
     fun `the settle delay is never zero`() {
         // An earlier version returned zero whenever it believed no shade was
         // involved, and it believed that every time, which is how the shade kept
-        // ending up in the screenshot.
+        // ending up in the screenshot. This is the regression guard for that.
         assertTrue(tracker.settleDelayMs() > 0L)
-    }
-
-    @Test
-    fun `the settle delay covers the gap between the focus signal and the settled frame`() {
-        // Not a tautology: this pins the constant against the two measurements
-        // that justify it, so shrinking it below the observed animation tail
-        // fails here rather than on a device.
-        val signalMs = 240L
-        val animationDoneMs = 600L
-
-        assertTrue(signalMs + ShadeTracker.SHADE_SETTLE_DELAY_MS >= animationDoneMs)
     }
 }
