@@ -255,4 +255,44 @@ class EventReminderSchedulerTest {
             jobsFor(eventId, ReminderLead.TWO_HOURS).single().state
         )
     }
+
+    @Test
+    fun cancelForEvent_cancelsBothLeadsOfThatEvent() = runTest {
+        val eventId = insertEvent(Duration.ofDays(10))
+        scheduler.scheduleAll()
+
+        scheduler.cancelForEvent(eventId)
+
+        // `single()` rather than a predicate over the list, for the same reason as the
+        // cancelForMemory tests: an empty list would make any "all cancelled"
+        // assertion vacuously true.
+        assertEquals(
+            WorkInfo.State.CANCELLED,
+            jobsFor(eventId, ReminderLead.TWO_DAYS).single().state
+        )
+        assertEquals(
+            WorkInfo.State.CANCELLED,
+            jobsFor(eventId, ReminderLead.TWO_HOURS).single().state
+        )
+    }
+
+    @Test
+    fun cancelForEvent_leavesTheOtherEventsOfTheSameMemoryAlone() = runTest {
+        // One screenshot can mention two dates, so one Memory can own several events.
+        // Rejecting one of them must not silence the other.
+        val rejected = insertEvent(Duration.ofDays(10))
+        val kept = insertEvent(Duration.ofDays(20))
+        scheduler.scheduleAll()
+
+        scheduler.cancelForEvent(rejected)
+
+        assertEquals(
+            WorkInfo.State.CANCELLED,
+            jobsFor(rejected, ReminderLead.TWO_HOURS).single().state
+        )
+        assertEquals(
+            WorkInfo.State.ENQUEUED,
+            jobsFor(kept, ReminderLead.TWO_HOURS).single().state
+        )
+    }
 }

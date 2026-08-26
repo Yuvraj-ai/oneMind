@@ -1,5 +1,6 @@
 package com.onemind.app.data.repository
 
+import com.onemind.app.data.events.EventReminderScheduler
 import com.onemind.app.data.local.dao.EventDao
 import com.onemind.app.data.local.entity.EventMapper.toDomain
 import com.onemind.app.data.local.entity.EventMapper.toEntity
@@ -14,7 +15,8 @@ import javax.inject.Singleton
 
 @Singleton
 class EventRepositoryImpl @Inject constructor(
-    private val dao: EventDao
+    private val dao: EventDao,
+    private val reminders: EventReminderScheduler
 ) : EventRepository {
 
     override suspend fun replaceEventsForMemory(memoryId: Long, events: List<DetectedEvent>) {
@@ -55,8 +57,14 @@ class EventRepositoryImpl @Inject constructor(
     override suspend fun expireOverdue(now: Instant): Int =
         dao.expireOverdue(now.toEpochMilli())
 
-    override suspend fun reject(eventId: Long) =
+    override suspend fun reject(eventId: Long) {
         dao.updateStatus(eventId, EventStatus.REJECTED)
+        // The status alone only stops the event earning *new* reminders; the ones
+        // already in WorkManager would still fire. Cancelled here rather than in the
+        // ViewModel for the reason #33 established: the repository is the one seam
+        // every caller passes through.
+        reminders.cancelForEvent(eventId)
+    }
 
     override suspend fun undoReject(eventId: Long) =
         dao.restoreToUpcoming(eventId)

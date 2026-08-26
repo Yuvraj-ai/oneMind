@@ -114,12 +114,34 @@ class EventReminderScheduler @Inject constructor(
      * is always none, and a lookup-based cancel would do nothing while appearing to
      * work. The tag was written onto the job at enqueue time and outlives the row.
      *
-     * Its predecessor, `cancelForEvent`, took an event id, was never called from
-     * anywhere, and could not have been called correctly from the one place that
-     * needed it. This is what v0.1.2 meant to have.
+     * Tag-based *here specifically*, and [cancelForEvent] is not: that one runs while
+     * the row is still present, this one runs after it is gone.
      */
     fun cancelForMemory(memoryId: Long) {
         WorkManager.getInstance(context).cancelAllWorkByTag(memoryTag(memoryId))
+    }
+
+    /**
+     * Drop the reminders belonging to one event, for when the user rejects it.
+     *
+     * Rejecting sets a status `getUnscheduledReminders` filters out, so the event earns
+     * no *new* reminders — but the ones already enqueued would still fire, and the user
+     * would be notified days later about something they had just declined.
+     *
+     * This existed in v0.1.2, was deleted in #33, and comes back because the reason it
+     * went away does not apply here. It was called only from the delete path, where the
+     * Memory's event rows have already cascaded away, making a lookup-based cancel a
+     * no-op that looked like it worked. On reject the row is still there.
+     *
+     * Enumerating [ReminderLead] rather than cancelling a per-event tag keeps
+     * [uniqueWorkName] the single source of naming; a lead that earned no job simply
+     * cancels a name nothing was enqueued under, which WorkManager treats as a no-op.
+     */
+    fun cancelForEvent(eventId: Long) {
+        val workManager = WorkManager.getInstance(context)
+        ReminderLead.entries.forEach { lead ->
+            workManager.cancelUniqueWork(uniqueWorkName(eventId, lead))
+        }
     }
 
     companion object {

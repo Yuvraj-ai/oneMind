@@ -118,7 +118,7 @@ class EventDetectionToReminderTest {
             database.searchIndexDao()
         )
         val detection = EventDetectionStage(
-            EventRepositoryImpl(database.eventDao()),
+            EventRepositoryImpl(database.eventDao(), scheduler),
             Clock.systemUTC()
         )
 

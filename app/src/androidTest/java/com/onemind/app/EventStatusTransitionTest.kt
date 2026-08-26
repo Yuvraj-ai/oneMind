@@ -3,12 +3,19 @@ package com.onemind.app
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.work.Configuration
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.testing.SynchronousExecutor
+import androidx.work.testing.WorkManagerTestInitHelper
+import com.onemind.app.data.events.EventReminderScheduler
 import com.onemind.app.data.local.OneMindDatabase
 import com.onemind.app.data.local.dao.EventDao
 import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.DetectedEventEntity
 import com.onemind.app.data.local.entity.MemoryEntity
 import com.onemind.app.data.repository.EventRepositoryImpl
+import com.onemind.app.domain.events.ReminderLead
 import com.onemind.app.domain.model.DetectedEvent
 import com.onemind.app.domain.model.EventStatus
 import com.onemind.app.domain.model.ProcessingState
@@ -42,16 +49,34 @@ class EventStatusTransitionTest {
 
     private var memoryId: Long = 0
 
+    private lateinit var scheduler: EventReminderScheduler
+    private lateinit var workManager: WorkManager
+
     @Before
     fun setup() = runTest {
-        database = Room.inMemoryDatabaseBuilder(
-            ApplicationProvider.getApplicationContext(),
-            OneMindDatabase::class.java
-        ).allowMainThreadQueries().build()
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
+        database = Room.inMemoryDatabaseBuilder(context, OneMindDatabase::class.java)
+            .allowMainThreadQueries().build()
         dao = database.eventDao()
         memoryDao = database.memoryDao()
+
+        // Far-future events only, so every reminder keeps a non-zero initial delay and
+        // stays ENQUEUED — the same reason EventReminderSchedulerTest does this. A
+        // zero delay would have SynchronousExecutor try to construct an @HiltWorker
+        // that has no factory here.
+        WorkManagerTestInitHelper.initializeTestWorkManager(
+            context,
+            Configuration.Builder().setExecutor(SynchronousExecutor()).build()
+        )
+        workManager = WorkManager.getInstance(context)
+        scheduler = EventReminderScheduler(context, dao)
+
         memoryId = newMemory()
     }
+
+    /** The production wiring, constructed by hand — the app has no Hilt test runner. */
+    private fun repository() = EventRepositoryImpl(dao, scheduler)
 
     @After
     fun teardown() {
@@ -173,7 +198,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun rejectingMovesAnEventOutOfUpcomingAndIntoThePastList() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val id = insertEvent()
 
         repository.reject(id)
@@ -184,7 +209,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun undoingARejectionBringsTheEventBack() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val id = insertEvent()
         repository.reject(id)
 
@@ -196,7 +221,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun undoingARejectionLetsTheEventEarnRemindersAgain() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val id = insertEvent(remindersScheduledAt = 1_000L)
         repository.reject(id)
 
@@ -209,7 +234,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun markingAnEventAddedToCalendarKeepsItUpcoming() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val id = insertEvent()
 
         repository.markAddedToCalendar(id)
@@ -232,7 +257,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun reprocessingKeepsARejectedEventRejected() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val at = Instant.now().plus(Duration.ofDays(3))
         val id = dao.insert(
             DetectedEventEntity(
@@ -252,7 +277,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun reprocessingKeepsTheRemindersScheduledMark() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val at = Instant.now().plus(Duration.ofDays(3))
         dao.insert(
             DetectedEventEntity(
@@ -272,7 +297,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun anEventAtANewTimeIsTreatedAsNew() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val original = Instant.now().plus(Duration.ofDays(3))
         val id = dao.insert(
             DetectedEventEntity(
@@ -294,7 +319,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun anEmptyReplacementStillClearsTheMemory() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val id = insertEvent()
         repository.reject(id)
 
@@ -307,7 +332,7 @@ class EventStatusTransitionTest {
 
     @Test
     fun onlyTheMatchingEventInheritsAStatus() = runTest {
-        val repository = EventRepositoryImpl(dao)
+        val repository = repository()
         val kept = Instant.now().plus(Duration.ofDays(3))
         val other = Instant.now().plus(Duration.ofDays(4))
         val keptId = dao.insert(
@@ -327,5 +352,28 @@ class EventStatusTransitionTest {
         val byTime = dao.getEventsForMemory(memoryId).associateBy { it.eventTime }
         assertEquals(EventStatus.REJECTED, byTime[kept.toEpochMilli()]!!.status)
         assertEquals(EventStatus.UPCOMING, byTime[other.toEpochMilli()]!!.status)
+    }
+
+    // --- reminders ---------------------------------------------------------
+
+    @Test
+    fun rejectingCancelsTheRemindersAlreadyEnqueued() = runTest {
+        val repository = repository()
+        val id = insertEvent(ahead = Duration.ofDays(10))
+        scheduler.scheduleAll()
+
+        repository.reject(id)
+
+        // The status alone only stops *new* reminders. Without the cancel, these fire
+        // days later about something the user just declined.
+        listOf(ReminderLead.TWO_DAYS, ReminderLead.TWO_HOURS).forEach { lead ->
+            assertEquals(
+                "lead $lead",
+                WorkInfo.State.CANCELLED,
+                workManager.getWorkInfosForUniqueWork(
+                    EventReminderScheduler.uniqueWorkName(id, lead)
+                ).get().single().state
+            )
+        }
     }
 }
