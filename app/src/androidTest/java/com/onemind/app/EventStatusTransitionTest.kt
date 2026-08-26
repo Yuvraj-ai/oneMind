@@ -9,6 +9,7 @@ import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.DetectedEventEntity
 import com.onemind.app.data.local.entity.MemoryEntity
 import com.onemind.app.data.repository.EventRepositoryImpl
+import com.onemind.app.domain.model.DetectedEvent
 import com.onemind.app.domain.model.EventStatus
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.model.SourceType
@@ -218,5 +219,113 @@ class EventStatusTransitionTest {
             EventStatus.IN_CALENDAR,
             dao.getEventsForMemory(memoryId).single().status
         )
+    }
+
+    // --- reprocessing ------------------------------------------------------
+
+    /** The same event, re-derived, as the pipeline would hand it back. */
+    private fun rederived(at: Instant, title: String = "AI Summit") = DetectedEvent(
+        memoryId = memoryId,
+        eventTime = at,
+        eventTitle = title
+    )
+
+    @Test
+    fun reprocessingKeepsARejectedEventRejected() = runTest {
+        val repository = EventRepositoryImpl(dao)
+        val at = Instant.now().plus(Duration.ofDays(3))
+        val id = dao.insert(
+            DetectedEventEntity(
+                memoryId = memoryId,
+                eventTime = at.toEpochMilli(),
+                eventTitle = "AI Summit"
+            )
+        )
+        repository.reject(id)
+
+        repository.replaceEventsForMemory(memoryId, listOf(rederived(at)))
+
+        // Without this the user's rejection is undone by a retry they did not connect
+        // to it, and the event they declined starts reminding them again.
+        assertEquals(EventStatus.REJECTED, dao.getEventsForMemory(memoryId).single().status)
+    }
+
+    @Test
+    fun reprocessingKeepsTheRemindersScheduledMark() = runTest {
+        val repository = EventRepositoryImpl(dao)
+        val at = Instant.now().plus(Duration.ofDays(3))
+        dao.insert(
+            DetectedEventEntity(
+                memoryId = memoryId, eventTime = at.toEpochMilli(),
+                eventTitle = "AI Summit", remindersScheduledAt = 1_000L
+            )
+        )
+
+        repository.replaceEventsForMemory(memoryId, listOf(rederived(at)))
+
+        // Carried with the status, and for the same reason: dropping it would make
+        // scheduleAll() enqueue a second set of reminders under new ids for an event
+        // that already has them.
+        assertEquals(1_000L, dao.getEventsForMemory(memoryId).single().remindersScheduledAt)
+        assertTrue(dao.getUnscheduledReminders().isEmpty())
+    }
+
+    @Test
+    fun anEventAtANewTimeIsTreatedAsNew() = runTest {
+        val repository = EventRepositoryImpl(dao)
+        val original = Instant.now().plus(Duration.ofDays(3))
+        val id = dao.insert(
+            DetectedEventEntity(
+                memoryId = memoryId, eventTime = original.toEpochMilli(),
+                eventTitle = "AI Summit", remindersScheduledAt = 1_000L
+            )
+        )
+        repository.reject(id)
+
+        val moved = Instant.now().plus(Duration.ofDays(5))
+        repository.replaceEventsForMemory(memoryId, listOf(rederived(moved)))
+
+        // The user rejected an event on the 3rd. This is one on the 5th — the text
+        // changed under it, so it is a different event and inherits nothing.
+        val row = dao.getEventsForMemory(memoryId).single()
+        assertEquals(EventStatus.UPCOMING, row.status)
+        assertNull(row.remindersScheduledAt)
+    }
+
+    @Test
+    fun anEmptyReplacementStillClearsTheMemory() = runTest {
+        val repository = EventRepositoryImpl(dao)
+        val id = insertEvent()
+        repository.reject(id)
+
+        repository.replaceEventsForMemory(memoryId, emptyList())
+
+        // A Memory whose dates were edited away must end up with no events. Carrying
+        // status forward must not turn this into an insert-only path.
+        assertTrue(dao.getEventsForMemory(memoryId).isEmpty())
+    }
+
+    @Test
+    fun onlyTheMatchingEventInheritsAStatus() = runTest {
+        val repository = EventRepositoryImpl(dao)
+        val kept = Instant.now().plus(Duration.ofDays(3))
+        val other = Instant.now().plus(Duration.ofDays(4))
+        val keptId = dao.insert(
+            DetectedEventEntity(
+                memoryId = memoryId,
+                eventTime = kept.toEpochMilli(),
+                eventTitle = "AI Summit"
+            )
+        )
+        repository.reject(keptId)
+
+        repository.replaceEventsForMemory(
+            memoryId,
+            listOf(rederived(kept), rederived(other, title = "Dentist"))
+        )
+
+        val byTime = dao.getEventsForMemory(memoryId).associateBy { it.eventTime }
+        assertEquals(EventStatus.REJECTED, byTime[kept.toEpochMilli()]!!.status)
+        assertEquals(EventStatus.UPCOMING, byTime[other.toEpochMilli()]!!.status)
     }
 }
