@@ -1,5 +1,6 @@
 package com.onemind.app.domain.repository
 
+import com.onemind.app.domain.model.ExtractedEntity
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +23,19 @@ interface MemoryRepository {
      * rendered with the same card. Order is unspecified; the caller reorders.
      */
     suspend fun getMemoriesByIds(ids: List<Long>): List<Memory>
+
+    /**
+     * The extracted entities of several Memories, keyed by Memory.
+     *
+     * Separate from [getMemoriesByIds] on purpose. That method carries the summary and
+     * categories and nothing else, because search shares it and would pay any widening
+     * on every keystroke. Callers that genuinely need entities ask for them here, and
+     * only they pay.
+     *
+     * A Memory with no entities is absent from the map rather than mapped to an empty
+     * list; callers should use `orEmpty()`.
+     */
+    suspend fun getEntitiesByMemoryIds(ids: List<Long>): Map<Long, List<ExtractedEntity>>
 
     /**
      * Get a single memory by ID. Returns null if not found.

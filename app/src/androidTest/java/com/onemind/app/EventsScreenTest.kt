@@ -18,8 +18,10 @@ import com.onemind.app.domain.repository.EventRepository
 import com.onemind.app.ui.events.EventsScreen
 import com.onemind.app.ui.events.EventsViewModel
 import com.onemind.app.ui.theme.OneMindTheme
+import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -74,7 +76,11 @@ class EventsScreenTest {
                 EventsScreen(
                     onNavigateToMemory = {},
                     onNavigateBack = { backPresses++ },
-                    viewModel = EventsViewModel(repository, Clock.systemUTC())
+                    // Relaxed: this screen's Memory-side data is the location line and
+                    // the category chips, and neither is what these tests are about.
+                    // An empty map and an empty list are exactly the "Memory named no
+                    // place and had no categories" case, which must render.
+                    viewModel = EventsViewModel(repository, mockk(relaxed = true), Clock.systemUTC())
                 )
             }
         }
@@ -150,38 +156,121 @@ class EventsScreenTest {
 
         composeRule.onNodeWithText("Upcoming").assertIsDisplayed()
         composeRule.onNodeWithText("Dentist on Thursday").assertIsDisplayed()
-        composeRule.onNodeWithText("Past events").assertIsDisplayed()
+        composeRule.onNodeWithText("Expired & rejected").assertIsDisplayed()
         composeRule.onNodeWithText("Concert last week").assertIsDisplayed()
+    }
+
+    @Test
+    fun rejectingAnEventMovesItToThePastList() {
+        repository.emitUpcoming(listOf(event("Dentist on Thursday")))
+        renderScreen()
+
+        composeRule.onNodeWithContentDescription("Reject").performClick()
+        composeRule.waitForIdle()
+
+        // Not deleted — rejecting is reversible, and a row nothing renders cannot be
+        // undone.
+        composeRule.onNodeWithText("Expired & rejected").assertIsDisplayed()
+        composeRule.onNodeWithText("Rejected").assertIsDisplayed()
+        composeRule.onNodeWithText("Dentist on Thursday").assertIsDisplayed()
+    }
+
+    @Test
+    fun aRejectedEventCanBeUndone() {
+        repository.emitUpcoming(listOf(event("Dentist on Thursday")))
+        renderScreen()
+        composeRule.onNodeWithContentDescription("Reject").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Upcoming").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Reject").assertIsDisplayed()
+    }
+
+    @Test
+    fun anEventAddedToTheCalendarStaysUpcomingAndSaysSo() {
+        repository.emitUpcoming(
+            listOf(event("AI Summit", status = EventStatus.IN_CALENDAR))
+        )
+        renderScreen()
+
+        composeRule.onNodeWithText("Upcoming").assertIsDisplayed()
+        composeRule.onNodeWithText("In calendar").assertIsDisplayed()
+        // Its only remaining transition is expiry, so neither action is offered.
+        composeRule.onNodeWithContentDescription("Add to calendar").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Reject").assertDoesNotExist()
+    }
+
+    @Test
+    fun anExpiredEventOffersNoActions() {
+        repository.emitExpired(
+            listOf(event("Concert last week", at = Instant.now().minus(Duration.ofDays(7))))
+        )
+        renderScreen()
+
+        composeRule.onNodeWithText("Concert last week").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Add to calendar").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Reject").assertDoesNotExist()
+        composeRule.onNodeWithText("Undo").assertDoesNotExist()
     }
 
     private fun event(
         title: String,
-        at: Instant = Instant.now().plus(Duration.ofDays(3))
+        at: Instant = Instant.now().plus(Duration.ofDays(3)),
+        status: EventStatus = EventStatus.UPCOMING
     ) = DetectedEvent(
         id = title.hashCode().toLong(),
         memoryId = 1L,
         eventTime = at,
         eventTitle = title,
-        status = EventStatus.UPCOMING
+        status = status
     )
 
     /**
-     * Enough of an [EventRepository] to render against.
+     * Enough of an [EventRepository] to render against, and to watch change.
      *
-     * Hand-rolled rather than Room-backed: what is under test is layout, and a real
-     * database would only add a way for this test to fail for reasons that have
-     * nothing to do with the status bar.
+     * Hand-rolled rather than Room-backed: what is under test is the screen, and a
+     * real database would only add ways for it to fail for reasons that have nothing
+     * to do with layout. It holds one list and derives the two the screen reads,
+     * because the status transitions are what the action tests are about — two fixed
+     * lists could not express an event moving between them.
      */
     private class FakeEventRepository : EventRepository {
-        private val upcoming = MutableStateFlow<List<DetectedEvent>>(emptyList())
-        private val expired = MutableStateFlow<List<DetectedEvent>>(emptyList())
+        private val all = MutableStateFlow<List<DetectedEvent>>(emptyList())
 
-        fun emitUpcoming(events: List<DetectedEvent>) { upcoming.value = events }
-        fun emitExpired(events: List<DetectedEvent>) { expired.value = events }
+        fun emitUpcoming(events: List<DetectedEvent>) = merge(events)
+
+        fun emitExpired(events: List<DetectedEvent>) =
+            merge(events.map { it.copy(status = EventStatus.EXPIRED) })
+
+        private fun merge(events: List<DetectedEvent>) {
+            all.value = all.value.filterNot { row -> events.any { it.id == row.id } } + events
+        }
+
+        private fun setStatus(eventId: Long, status: EventStatus) {
+            all.value = all.value.map { if (it.id == eventId) it.copy(status = status) else it }
+        }
 
         override suspend fun replaceEventsForMemory(memoryId: Long, events: List<DetectedEvent>) = Unit
-        override fun observeUpcoming(): Flow<List<DetectedEvent>> = upcoming
-        override fun observeExpired(): Flow<List<DetectedEvent>> = expired
+
+        override fun observeUpcoming(): Flow<List<DetectedEvent>> = all.map { list ->
+            list.filter {
+                it.status == EventStatus.UPCOMING || it.status == EventStatus.IN_CALENDAR
+            }.sortedBy { it.eventTime }
+        }
+
+        override fun observeExpired(): Flow<List<DetectedEvent>> = all.map { list ->
+            list.filter {
+                it.status == EventStatus.EXPIRED || it.status == EventStatus.REJECTED
+            }.sortedByDescending { it.eventTime }
+        }
+
         override suspend fun expireOverdue(now: Instant): Int = 0
+        override suspend fun reject(eventId: Long) = setStatus(eventId, EventStatus.REJECTED)
+        override suspend fun undoReject(eventId: Long) = setStatus(eventId, EventStatus.UPCOMING)
+        override suspend fun markAddedToCalendar(eventId: Long) =
+            setStatus(eventId, EventStatus.IN_CALENDAR)
     }
 }

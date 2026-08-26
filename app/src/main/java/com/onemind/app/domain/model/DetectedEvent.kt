@@ -25,9 +25,27 @@ data class DetectedEvent(
     val remindersScheduledAt: Instant? = null
 )
 
+/**
+ * Where an event stands, combining what time has done to it with what the user has
+ * decided about it.
+ *
+ * Persisted as TEXT by name, with no explicit converter, which is why adding a value
+ * here costs no migration and leaves the schema at version 5. The cost is elsewhere:
+ * any SQL that spells a status out as a literal becomes an incomplete enumeration the
+ * moment this grows, and nothing fails to compile when it does.
+ */
 enum class EventStatus {
     /** The event time has not yet passed. */
     UPCOMING,
     /** The event time has passed. Kept for history. */
-    EXPIRED
+    EXPIRED,
+    /** The user declined this event. Reversible, and shown alongside expired ones. */
+    REJECTED,
+    /**
+     * The user exported this event to their calendar app.
+     *
+     * Still upcoming — exporting is not dismissing — so it stays in the upcoming list
+     * and still expires when its time passes.
+     */
+    IN_CALENDAR
 }

@@ -252,6 +252,41 @@ class DerivedDataDaoTest {
         assertEquals(2, fetched.size)
     }
 
+    @Test
+    fun entitiesCanBeFetchedForManyMemoriesAtOnce() = runTest {
+        val other = memoryDao.insertMemoryWithBlocks(
+            MemoryEntity(
+                createdAt = 1L, updatedAt = 1L,
+                sourceType = SourceType.MANUAL, processingState = ProcessingState.SAVED
+            ),
+            emptyList()
+        )
+        dao.insertEntities(
+            listOf(
+                ExtractedEntityEntity(
+                    memoryId = memoryId, name = "Moscone Center",
+                    entityType = EntityType.PLACE, confidence = 0.8f,
+                    source = DerivedSource.OCR
+                ),
+                ExtractedEntityEntity(
+                    memoryId = other, name = "Google",
+                    entityType = EntityType.ORGANIZATION, confidence = null,
+                    source = DerivedSource.USER_TEXT
+                )
+            )
+        )
+
+        // One query for many Memories, so the events list does not pay a round trip
+        // per card. Unfiltered: the caller decides that PLACE is the one it wants.
+        val fetched = dao.getEntitiesForMemories(listOf(memoryId, other))
+
+        assertEquals(2, fetched.size)
+        assertEquals(
+            setOf(memoryId, other),
+            fetched.map { it.memoryId }.toSet()
+        )
+    }
+
     // --- clearing and cascade --------------------------------------------
 
     @Test

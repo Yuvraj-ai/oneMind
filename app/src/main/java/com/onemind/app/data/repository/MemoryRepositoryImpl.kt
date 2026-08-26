@@ -12,6 +12,7 @@ import com.onemind.app.data.local.entity.EntityMapper.toEntity
 import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.domain.model.Category
 import com.onemind.app.domain.model.DerivedData
+import com.onemind.app.domain.model.ExtractedEntity
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.repository.InvalidStateTransitionException
@@ -124,6 +125,19 @@ class MemoryRepositoryImpl @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    override suspend fun getEntitiesByMemoryIds(ids: List<Long>): Map<Long, List<ExtractedEntity>> {
+        if (ids.isEmpty()) return emptyMap()
+
+        // Chunked for the same reason every other batched read here is: Room expands
+        // `IN (:ids)` to one bind parameter per element and SQLite caps those at 999.
+        return with(DerivedMapper) {
+            ids.chunked(SQL_VARIABLE_LIMIT)
+                .flatMap { derivedDataDao.getEntitiesForMemories(it) }
+                .map { it.toDomain() }
+                .groupBy { it.memoryId }
         }
     }
 

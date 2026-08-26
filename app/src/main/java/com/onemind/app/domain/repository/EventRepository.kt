@@ -37,4 +37,33 @@ interface EventRepository {
      *   from "this did not run".
      */
     suspend fun expireOverdue(now: Instant): Int
+
+    /**
+     * The user declined this event.
+     *
+     * Reversible, and named for what the user did rather than for the column it
+     * writes — `domain` states intent, and which status that becomes is the
+     * implementation's business, the same reasoning that keeps `Instant` on this
+     * side of the seam and epoch millis on the other.
+     */
+    suspend fun reject(eventId: Long)
+
+    /**
+     * Take back a rejection, returning the event to plain upcoming.
+     *
+     * Unconditional: an event rejected before its time and undone after it comes back
+     * upcoming with a past time, and the next [expireOverdue] moves it on. That is
+     * self-correcting, and cheaper than reading the row back to decide.
+     */
+    suspend fun undoReject(eventId: Long)
+
+    /**
+     * The user exported this event to their calendar app.
+     *
+     * Still upcoming — a calendar entry is a copy, not a dismissal — and its oneMind
+     * reminders are deliberately left alone: `ACTION_INSERT` opens the calendar app's
+     * own add screen and oneMind never learns whether the user saved or cancelled, so
+     * cancelling here would sometimes remove the only reminder they have.
+     */
+    suspend fun markAddedToCalendar(eventId: Long)
 }

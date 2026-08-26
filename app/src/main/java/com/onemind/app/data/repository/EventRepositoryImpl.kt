@@ -4,6 +4,7 @@ import com.onemind.app.data.local.dao.EventDao
 import com.onemind.app.data.local.entity.EventMapper.toDomain
 import com.onemind.app.data.local.entity.EventMapper.toEntity
 import com.onemind.app.domain.model.DetectedEvent
+import com.onemind.app.domain.model.EventStatus
 import com.onemind.app.domain.repository.EventRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -33,4 +34,13 @@ class EventRepositoryImpl @Inject constructor(
 
     override suspend fun expireOverdue(now: Instant): Int =
         dao.expireOverdue(now.toEpochMilli())
+
+    override suspend fun reject(eventId: Long) =
+        dao.updateStatus(eventId, EventStatus.REJECTED)
+
+    override suspend fun undoReject(eventId: Long) =
+        dao.restoreToUpcoming(eventId)
+
+    override suspend fun markAddedToCalendar(eventId: Long) =
+        dao.updateStatus(eventId, EventStatus.IN_CALENDAR)
 }

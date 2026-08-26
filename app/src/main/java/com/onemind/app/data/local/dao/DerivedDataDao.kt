@@ -69,6 +69,16 @@ interface DerivedDataDao {
     @Query("SELECT * FROM memory_summaries WHERE memoryId IN (:memoryIds)")
     suspend fun getSummaries(memoryIds: List<Long>): List<MemorySummaryEntity>
 
+    /**
+     * Entities for many Memories at once, so a list of events needs one query.
+     *
+     * Sits beside [getSummaries] and exists for the same reason: a round trip per
+     * rendered row is a cost paid on every scroll. Returns every type — the caller
+     * picks out the one it cares about.
+     */
+    @Query("SELECT * FROM extracted_entities WHERE memoryId IN (:memoryIds)")
+    suspend fun getEntitiesForMemories(memoryIds: List<Long>): List<ExtractedEntityEntity>
+
     // --- clearing ---------------------------------------------------------
 
     @Query("DELETE FROM ocr_results WHERE memoryId = :memoryId")
