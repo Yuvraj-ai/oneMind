@@ -52,22 +52,27 @@ class ScreenCaptureTileService : TileService() {
             return
         }
 
-        // Collapse the notification shade FIRST. Without a delay, the screenshot
-        // captures the shade itself rather than the app underneath — because the
-        // tile's onClick fires while the shade is still visible, and the collapse
-        // animation takes ~300ms to complete.
+        // Just send the command. Closing the shade is deliberately NOT done here.
         //
-        // We send the command with a delay flag so the accessibility service waits
-        // for the shade to finish animating before grabbing the frame.
+        // An earlier comment in this spot claimed the shade "collapses automatically
+        // after the tile's onClick returns, so a short delay in the service is all
+        // that's needed". Both halves are false, and it was A/B tested rather than
+        // reasoned about: with the accessibility service's dismissal call commented
+        // out, the shade stays open indefinitely — still focused 5s after the tap —
+        // and the capture was a picture of it. `TileService.onClick` carries no
+        // collapse contract; only `startActivityAndCollapse` closes the shade, and
+        // that path is used above solely for the settings redirect.
+        //
+        // Dismissal belongs to the accessibility service because
+        // `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE` is available to an accessibility
+        // service and to almost nothing else. The service asks for the dismissal,
+        // waits for the shade's window to go, lets the collapse animation settle, and
+        // only then grabs the frame. See ScreenCaptureAccessibilityService and
+        // ShadeTracker.
         val intent = Intent(this, ScreenCaptureAccessibilityService::class.java).apply {
             action = ScreenCaptureAccessibilityService.ACTION_TAKE_SCREENSHOT
         }
 
-        // Collapse the shade. On API 34+ we need startActivityAndCollapse with a
-        // dummy transparent activity to actually trigger the collapse, but a simpler
-        // approach: just send the command with a built-in delay handled by the
-        // service itself. The shade collapses automatically after the tile's onClick
-        // returns, so a short delay in the service is all that's needed.
         startService(intent)
     }
 

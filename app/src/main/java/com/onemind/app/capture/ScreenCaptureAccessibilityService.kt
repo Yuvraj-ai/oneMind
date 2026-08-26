@@ -65,7 +65,7 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
-     * Which window is in front, and whether it is the notification shade.
+     * Which app the user came from, and when the shade has finished leaving.
      *
      * Created lazily rather than in a field initialiser because `packageName` is a
      * `Context` method and is not safe to call before the service is attached.
@@ -112,11 +112,29 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
      * ## Why the delay survives, demoted
      *
      * Dismissal is asynchronous and reports nothing. But the shade is a window, so
-     * its departure arrives as a window-state change — the same events this service
-     * already receives, which is how it knew the shade was in front to begin with.
-     * Capture is triggered by that signal, and the 500ms remains only as a backstop
-     * for a device that never sends it. First one wins; [ShadeTracker] guarantees
-     * only one does.
+     * its departure arrives as a window-state change back to the foreground app —
+     * ~240ms after the request, measured. Capture is triggered by that signal, and
+     * the 500ms remains only as a backstop for a device that never sends it. First
+     * one wins; [ShadeTracker] guarantees only one does.
+     *
+     * ## Why nothing checks whether the shade is open
+     *
+     * A previous version did, and the check was always false. The shade's arrival is
+     * not a `TYPE_WINDOW_STATE_CHANGED` — on API 36 it produces only
+     * `TYPE_WINDOW_CONTENT_CHANGED` — so the dismissal was never requested and the
+     * shade was captured anyway, the original bug surviving its own fix. The check is
+     * also unnecessary: this command comes from a Quick Settings tile, and reaching
+     * that tile means the shade is open. So the dismissal is unconditional, and so is
+     * the settle. See [ShadeTracker].
+     *
+     * ## Why the signal alone was not enough either
+     *
+     * The window-state change means *focus* left the shade, which happens near the
+     * start of the collapse animation rather than at its end (~240ms against an
+     * animation still running at ~600-700ms). Capturing on the raw signal produced a
+     * screenshot of the shade mid-fade. So the signal is followed by
+     * [ShadeTracker.settleDelayMs] before the frame is grabbed. The backstop gets the
+     * same settle: a timeout means the shade may still be closing, not that it isn't.
      *
      * ## API 30
      *
@@ -127,22 +145,24 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_TAKE_SCREENSHOT) {
+            // Armed before the request, so the signal cannot arrive unheard.
+            shadeTracker.armCapture(::captureAfterSettle)
             requestShadeDismissal()
-
-            val capturedSynchronously = shadeTracker.awaitShadeGone(::takeScreenshotNow)
-            if (!capturedSynchronously) {
-                handler.postDelayed({ shadeTracker.onTimeout() }, SHADE_COLLAPSE_TIMEOUT_MS)
-            }
+            handler.postDelayed({ shadeTracker.onTimeout() }, SHADE_COLLAPSE_TIMEOUT_MS)
         }
         return START_NOT_STICKY
     }
 
+    /** Let the shade finish painting, then grab the frame. */
+    private fun captureAfterSettle() {
+        handler.postDelayed({ takeScreenshotNow() }, shadeTracker.settleDelayMs())
+    }
+
     /**
-     * Ask the system to close the notification shade, if it is open and if this
-     * Android version can be asked.
+     * Ask the system to close the notification shade, if this Android version can be
+     * asked. Harmless when there is no shade open to close.
      */
     private fun requestShadeDismissal() {
-        if (!shadeTracker.isShadeInFront) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
 
         performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
@@ -242,9 +262,14 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
          * This used to be the mechanism and is now the backstop, which is why it
          * kept its value and changed its name. The window-state change normally
          * arrives well inside it; when it does, this never fires. When it does not —
-         * an OEM shade under a different package, or API 30 where dismissal cannot
-         * be requested at all — the capture still happens rather than never
-         * happening, and the user gets a picture of the shade instead of silence.
+         * API 30, where dismissal cannot be requested at all, or a device that
+         * collapses the shade without transferring window focus — the capture still
+         * happens rather than never happening, and the user gets a picture of the
+         * shade instead of silence.
+         *
+         * Firing it does not skip [ShadeTracker.settleDelayMs]: expiry says only that
+         * no signal arrived, which is if anything a reason to think the collapse is
+         * still in progress.
          */
         private const val SHADE_COLLAPSE_TIMEOUT_MS = 500L
     }
