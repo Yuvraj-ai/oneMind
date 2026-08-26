@@ -71,16 +71,22 @@ class EventsScreenTest {
         composeRule.activity.runOnUiThread {
             composeRule.activity.enableEdgeToEdge()
         }
+        // Built here rather than inside setContent. A ViewModel constructed in a
+        // composable is rebuilt on every recomposition, and lint's
+        // ViewModelConstructorInComposable says so — as an error, which failed
+        // lintDebug from the moment this file was added in #37.
+        //
+        // Relaxed mock for the MemoryRepository: this screen's Memory-side data is the
+        // location line and the category chips, and neither is what these tests are
+        // about. An empty map and an empty list are exactly the "Memory named no place
+        // and had no categories" case, which must render.
+        val viewModel = EventsViewModel(repository, mockk(relaxed = true), Clock.systemUTC())
         composeRule.setContent {
             OneMindTheme {
                 EventsScreen(
                     onNavigateToMemory = {},
                     onNavigateBack = { backPresses++ },
-                    // Relaxed: this screen's Memory-side data is the location line and
-                    // the category chips, and neither is what these tests are about.
-                    // An empty map and an empty list are exactly the "Memory named no
-                    // place and had no categories" case, which must render.
-                    viewModel = EventsViewModel(repository, mockk(relaxed = true), Clock.systemUTC())
+                    viewModel = viewModel
                 )
             }
         }
