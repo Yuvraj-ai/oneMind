@@ -1,4 +1,4 @@
-package com.onemind.app.ui.feed
+package com.onemind.app.ui.search
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -25,6 +25,10 @@ import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.processing.StageStatus
 import com.onemind.app.domain.search.SearchResult
 import com.onemind.app.domain.search.SnippetExtractor
+import com.onemind.app.ui.feed.CategoryChips
+import com.onemind.app.ui.feed.MemoryCard
+import com.onemind.app.ui.feed.SourceRow
+import com.onemind.app.ui.feed.formatTimestamp
 import java.io.File
 
 /**

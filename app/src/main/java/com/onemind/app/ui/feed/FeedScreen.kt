@@ -7,16 +7,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -32,6 +29,7 @@ fun FeedScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToEvents: () -> Unit,
     onNavigateToSection: (SectionDestination) -> Unit,
+    onNavigateToSearch: () -> Unit,
     viewModel: FeedViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -73,40 +71,26 @@ fun FeedScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            SearchBar(
-                query = uiState.searchQuery,
-                onQueryChange = { viewModel.onSearchQueryChanged(it) },
-                onClear = { viewModel.clearSearch() },
+            SearchPill(
+                onClick = onNavigateToSearch,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            // Browsing controls are hidden while searching. The locked product
-            // decisions rule out manual filters in the search experience: context
-            // belongs in the query text, not in chips beside it. They stay for
-            // browsing, which is a different activity.
-            if (!uiState.isSearchActive) {
-                SectionNav(
-                    selected = SectionDestination.FEED,
-                    onSelect = onNavigateToSection,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+            SectionNav(
+                selected = SectionDestination.FEED,
+                onSelect = onNavigateToSection,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
 
-                SourceFilterRow(
-                    options = uiState.availableSources,
-                    selectedFilter = uiState.sourceFilter,
-                    onFilterSelected = { viewModel.setSourceFilter(it) }
-                )
-            }
+            SourceFilterRow(
+                options = uiState.availableSources,
+                selectedFilter = uiState.sourceFilter,
+                onFilterSelected = { viewModel.setSourceFilter(it) }
+            )
 
             when {
-                uiState.isSearchActive -> SearchResultsSection(
-                    uiState = uiState,
-                    onMemoryClick = { onNavigateToMemory(it) },
-                    onMemoryLongClick = { viewModel.requestDelete(it) }
-                )
-
                 uiState.isLoading -> Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -146,100 +130,36 @@ fun FeedScreen(
     }
 }
 
-@Composable
-private fun SearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClear: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    TextField(
-        value = query,
-        onValueChange = onQueryChange,
-        modifier = modifier,
-        placeholder = { Text("Search your memories...") },
-        leadingIcon = {
-            Icon(imageVector = Icons.Default.Search, contentDescription = null)
-        },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = onClear) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Clear search"
-                    )
-                }
-            }
-        },
-        singleLine = true,
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent
-        )
-    )
-}
-
 /**
- * Search results, or an explanation of why there are none.
+ * A search affordance that is not a text field.
  *
- * The three states are kept distinct because they call for different things from
- * the user: wait, refine, or carry on. Collapsing them into one "no results"
- * message would tell someone their search failed while it was still running.
+ * Looks like the bar it replaces and behaves like a button, which is the point: search is
+ * its own destination now, and a field here would put a second copy of the query state on
+ * a screen that no longer owns any.
  */
 @Composable
-private fun SearchResultsSection(
-    uiState: FeedUiState,
-    onMemoryClick: (Long) -> Unit,
-    onMemoryLongClick: (com.onemind.app.domain.model.Memory) -> Unit
-) {
-    when {
-        uiState.isSearching && uiState.searchResults.isEmpty() -> Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+private fun SearchPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(64.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            CircularProgressIndicator()
-        }
-
-        uiState.searchResults.isEmpty() -> Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "No memories found",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Try describing it differently",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-
-        else -> LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(
-                items = uiState.searchResults,
-                key = { it.memory.id }
-            ) { result ->
-                SearchResultCard(
-                    result = result,
-                    queryTerms = uiState.searchTerms,
-                    onClick = { onMemoryClick(result.memory.id) },
-                    onLongClick = { onMemoryLongClick(result.memory) }
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Ask for anything you saved…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
