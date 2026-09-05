@@ -21,6 +21,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onemind.app.ui.components.SectionDestination
+import com.onemind.app.ui.components.SectionNav
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -29,6 +31,7 @@ fun FeedScreen(
     onNavigateToMemory: (Long) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToEvents: () -> Unit,
+    onNavigateToSection: (SectionDestination) -> Unit,
     viewModel: FeedViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -84,9 +87,9 @@ fun FeedScreen(
             // belongs in the query text, not in chips beside it. They stay for
             // browsing, which is a different activity.
             if (!uiState.isSearchActive) {
-                ViewModeToggle(
-                    currentMode = uiState.viewMode,
-                    onModeChanged = { viewModel.setViewMode(it) },
+                SectionNav(
+                    selected = SectionDestination.FEED,
+                    onSelect = onNavigateToSection,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
@@ -121,15 +124,7 @@ fun FeedScreen(
                                 EmptyFeedState(modifier = Modifier.fillMaxSize())
                             }
 
-                        uiState.viewMode == ViewMode.FEED -> MemoryFeedList(
-                            memories = filteredMemories,
-                            onMemoryClick = { onNavigateToMemory(it.id) },
-                            onMemoryLongClick = { viewModel.requestDelete(it) },
-                            onRetryProcessing = { viewModel.retryProcessing(it) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-
-                        else -> TimelineView(
+                        else -> MemoryFeedList(
                             memories = filteredMemories,
                             onMemoryClick = { onNavigateToMemory(it.id) },
                             onMemoryLongClick = { viewModel.requestDelete(it) },
@@ -302,8 +297,14 @@ private fun MemoryFeedList(
     }
 }
 
+/**
+ * Shared with [TimelineScreen], which is why it is not private.
+ *
+ * Two destinations now offer delete on long-press, and two copies of a confirmation dialog
+ * is how the two drift into saying different things about the same irreversible action.
+ */
 @Composable
-private fun DeleteConfirmationDialog(
+internal fun DeleteConfirmationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -322,29 +323,6 @@ private fun DeleteConfirmationDialog(
             }
         }
     )
-}
-
-@Composable
-private fun ViewModeToggle(
-    currentMode: ViewMode,
-    onModeChanged: (ViewMode) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        FilterChip(
-            selected = currentMode == ViewMode.FEED,
-            onClick = { onModeChanged(ViewMode.FEED) },
-            label = { Text("Feed") }
-        )
-        FilterChip(
-            selected = currentMode == ViewMode.TIMELINE,
-            onClick = { onModeChanged(ViewMode.TIMELINE) },
-            label = { Text("Timeline") }
-        )
-    }
 }
 
 /**
@@ -377,53 +355,5 @@ private fun EmptyFilterState(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
-    }
-}
-
-/**
- * Timeline view: memories grouped under sticky date headers.
- */
-@Composable
-private fun TimelineView(
-    memories: List<com.onemind.app.domain.model.Memory>,
-    onMemoryClick: (com.onemind.app.domain.model.Memory) -> Unit,
-    onMemoryLongClick: (com.onemind.app.domain.model.Memory) -> Unit,
-    onRetryProcessing: (com.onemind.app.domain.model.Memory) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val groups = remember(memories) { DateGrouping.group(memories) }
-
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        groups.forEach { (group, groupMemories) ->
-            stickyHeader(key = group.name) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Text(
-                        text = group.label,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-            }
-
-            items(
-                items = groupMemories,
-                key = { it.id }
-            ) { memory ->
-                MemoryCard(
-                    memory = memory,
-                    onClick = { onMemoryClick(memory) },
-                    onLongClick = { onMemoryLongClick(memory) },
-                    onRetryProcessing = { onRetryProcessing(memory) }
-                )
-            }
-        }
     }
 }

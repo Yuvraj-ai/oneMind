@@ -17,9 +17,6 @@ data class FeedUiState(
     val sourceFilter: SourceFilter? = null,
     val availableSources: List<SourceFilterOption> = emptyList(),
 
-    /** View mode (#22). FEED = flat list, TIMELINE = date-grouped. */
-    val viewMode: ViewMode = ViewMode.FEED,
-
     // --- search (#24) ------------------------------------------------------
 
     /** Exactly what the user typed. */
@@ -67,5 +64,3 @@ data class SourceFilterOption(
     val label: String,
     val count: Int
 )
-
-enum class ViewMode { FEED, TIMELINE }

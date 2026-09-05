@@ -11,6 +11,7 @@ import com.onemind.app.ui.composer.ComposerScreen
 import com.onemind.app.ui.events.EventsScreen
 import com.onemind.app.ui.feed.FeedScreen
 import com.onemind.app.ui.feed.MemoryDetailScreen
+import com.onemind.app.ui.feed.TimelineScreen
 import com.onemind.app.ui.onboarding.OnboardingScreen
 import com.onemind.app.ui.settings.SettingsScreen
 
@@ -52,7 +53,17 @@ fun OneMindNavHost(
                 },
                 onNavigateToEvents = {
                     navController.navigate(NavRoutes.EVENTS)
-                }
+                },
+                onNavigateToSection = navController::navigateToSection
+            )
+        }
+
+        composable(NavRoutes.TIMELINE) {
+            TimelineScreen(
+                onNavigateToMemory = { memoryId ->
+                    navController.navigate(NavRoutes.memoryDetail(memoryId))
+                },
+                onNavigateToSection = navController::navigateToSection
             )
         }
 

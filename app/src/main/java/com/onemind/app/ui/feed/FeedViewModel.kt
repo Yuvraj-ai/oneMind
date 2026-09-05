@@ -153,10 +153,6 @@ class FeedViewModel @Inject constructor(
         _uiState.update { it.copy(sourceFilter = filter) }
     }
 
-    fun setViewMode(mode: ViewMode) {
-        _uiState.update { it.copy(viewMode = mode) }
-    }
-
     private fun resolveSourceLabel(sourceType: SourceType, sourcePackage: String?): String {
         if (sourcePackage != null) {
             try {
