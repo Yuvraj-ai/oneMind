@@ -39,15 +39,6 @@ import com.onemind.app.ui.theme.PillShape
 import com.onemind.app.ui.theme.Tracking
 
 /**
- * How far down the list the entrance stagger keeps counting.
- *
- * At 40 ms a step, an uncapped index would make the fiftieth card wait two seconds to
- * appear after the user scrolled to it. The stagger is there to make the first screenful
- * arrive with rhythm; past that, immediate is correct.
- */
-private const val STAGGER_CAP = 7
-
-/**
  * The same Memories the feed shows, in date sections on a rail.
  *
  * Reuses [FeedViewModel] rather than getting its own. It needs precisely the feed's
@@ -102,12 +93,12 @@ fun TimelineScreen(
                 // into view would get a new index — which re-keys StaggeredEntrance and
                 // replays its entrance. The stagger has to run down the whole screen
                 // rather than restarting at each section, hence one flat numbering across
-                // groups.
+                // groups. Capping the delay is StaggeredEntrance's own business.
                 val stagger = remember(groups) {
                     groups.asSequence()
                         .flatMap { (_, memories) -> memories.asSequence() }
                         .withIndex()
-                        .associate { (index, memory) -> memory.id to minOf(index, STAGGER_CAP) }
+                        .associate { (index, memory) -> memory.id to index }
                 }
                 val railColor = MaterialTheme.colorScheme.outlineVariant
                 val ringColor = MaterialTheme.colorScheme.background

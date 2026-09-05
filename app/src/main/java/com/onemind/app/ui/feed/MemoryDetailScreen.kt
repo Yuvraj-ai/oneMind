@@ -28,6 +28,7 @@ import com.onemind.app.domain.model.ContentBlock
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.processing.StageStatus
+import com.onemind.app.ui.components.CategoryChips
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter

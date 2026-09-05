@@ -52,9 +52,6 @@ fun OneMindNavHost(
                 onNavigateToSettings = {
                     navController.navigate(NavRoutes.SETTINGS)
                 },
-                onNavigateToEvents = {
-                    navController.navigate(NavRoutes.EVENTS)
-                },
                 onNavigateToSection = navController::navigateToSection,
                 onNavigateToSearch = { navController.navigate(NavRoutes.SEARCH) }
             )

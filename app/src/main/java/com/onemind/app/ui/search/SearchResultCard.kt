@@ -25,8 +25,7 @@ import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.processing.StageStatus
 import com.onemind.app.domain.search.SearchResult
 import com.onemind.app.domain.search.SnippetExtractor
-import com.onemind.app.ui.feed.CategoryChips
-import com.onemind.app.ui.feed.MemoryCard
+import com.onemind.app.ui.components.CategoryChips
 import com.onemind.app.ui.feed.SourceRow
 import com.onemind.app.ui.feed.formatTimestamp
 import java.io.File
@@ -34,7 +33,7 @@ import java.io.File
 /**
  * A search result.
  *
- * Differs from [MemoryCard] in one respect that matters: it shows *why* this Memory
+ * Differs from a feed card in one respect that matters: it shows *why* this Memory
  * matched. A card showing the opening words of a Memory leaves the user opening
  * every result to find out which one was right, which is the work the search was
  * supposed to save.
