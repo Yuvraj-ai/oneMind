@@ -2,12 +2,17 @@ package com.onemind.app.ui.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,7 +23,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onemind.app.data.ai.ProviderType
 import com.onemind.app.domain.model.LlmCapability
+import com.onemind.app.ui.components.HeroHeader
+import com.onemind.app.ui.components.PhoneFrame
 import com.onemind.app.ui.onboarding.CloudTestResult
+import com.onemind.app.ui.theme.OneMindSuccess
+import com.onemind.app.ui.theme.Tracking
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,25 +37,25 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
+    PhoneFrame {
+        HeroHeader(
+            eyebrow = "oneMind",
+            title = "Settings",
+            leading = {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
-            )
-        }
-    ) { paddingValues ->
+            }
+        )
+
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+                .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
             // Current provider section
             CurrentProviderSection(
@@ -54,16 +63,12 @@ fun SettingsScreen(
                 activeModelName = uiState.activeModelName
             )
 
-            HorizontalDivider()
-
             // Change local model
             LocalModelSection(
                 uiState = uiState,
                 onShowPicker = { viewModel.onShowModelPicker() },
                 onCancelDownload = { viewModel.onCancelDownload() }
             )
-
-            HorizontalDivider()
 
             // Cloud provider config
             CloudProviderSection(
@@ -75,8 +80,6 @@ fun SettingsScreen(
                 onTestConnection = { viewModel.onTestCloudConnection() },
                 onConfirm = { viewModel.onConfirmCloudConfig() }
             )
-
-            HorizontalDivider()
 
             // Storage management
             StorageSection(
@@ -117,34 +120,66 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * A labelled settings block.
+ *
+ * The label sits outside the panel, as an eyebrow, rather than inside it as a heading. That
+ * is what lets the panel itself be tonal and borderless while the page still reads as a
+ * list of named sections.
+ */
+@Composable
+private fun SettingsSection(label: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            letterSpacing = Tracking.Eyebrow,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        content()
+    }
+}
+
 @Composable
 private fun CurrentProviderSection(
     providerType: ProviderType,
     activeModelName: String
 ) {
-    Column {
-        Text("Active AI Provider", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-
+    SettingsSection(label = "Active AI provider") {
         Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            // The summary-block treatment: 40 dp corners except 16 dp top-right.
+            shape = RoundedCornerShape(
+                topStart = 40.dp, topEnd = 16.dp, bottomEnd = 40.dp, bottomStart = 40.dp
+            ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = activeModelName,
-                    style = MaterialTheme.typography.bodyLarge
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Memory,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-                Text(
-                    text = when (providerType) {
-                        ProviderType.LOCAL -> "Local (on-device)"
-                        ProviderType.CLOUD -> "Cloud provider"
-                        ProviderType.NONE -> "Not configured"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = activeModelName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = when (providerType) {
+                            ProviderType.LOCAL -> "Local (on-device)"
+                            ProviderType.CLOUD -> "Cloud provider"
+                            ProviderType.NONE -> "Not configured"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
     }
@@ -156,10 +191,7 @@ private fun LocalModelSection(
     onShowPicker: () -> Unit,
     onCancelDownload: () -> Unit
 ) {
-    Column {
-        Text("Local Model", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-
+    SettingsSection(label = "Local model") {
         if (uiState.isDownloading) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -194,7 +226,6 @@ private fun LocalModelSection(
         }
 
         if (uiState.downloadError != null) {
-            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = uiState.downloadError,
                 style = MaterialTheme.typography.bodySmall,
@@ -214,9 +245,14 @@ private fun CloudProviderSection(
     onTestConnection: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    Column {
-        Text("Cloud Provider", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
+    SettingsSection(label = "Cloud provider") {
+        val fieldShape = MaterialTheme.shapes.medium
+        val fieldColors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         OutlinedTextField(
             value = uiState.cloudBaseUrl,
@@ -224,10 +260,10 @@ private fun CloudProviderSection(
             label = { Text("Base URL") },
             placeholder = { Text("https://api.openai.com") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            shape = fieldShape,
+            colors = fieldColors
         )
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
             value = uiState.cloudApiKey,
@@ -235,10 +271,10 @@ private fun CloudProviderSection(
             label = { Text("API Key") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation()
+            visualTransformation = PasswordVisualTransformation(),
+            shape = fieldShape,
+            colors = fieldColors
         )
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
             value = uiState.cloudModelName,
@@ -246,50 +282,89 @@ private fun CloudProviderSection(
             label = { Text("Model Name") },
             placeholder = { Text("gpt-4o-mini") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            shape = fieldShape,
+            colors = fieldColors
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
-            Text("Supports vision", modifier = Modifier.weight(1f))
-            Switch(checked = uiState.cloudSupportsVision, onCheckedChange = onVisionToggle)
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Visibility,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Supports vision",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.cloudSupportsVision,
+                    onCheckedChange = onVisionToggle,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        uncheckedBorderColor = MaterialTheme.colorScheme.outline
+                    )
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        val canTest = uiState.cloudBaseUrl.isNotBlank() &&
+            uiState.cloudApiKey.isNotBlank() &&
+            uiState.cloudModelName.isNotBlank() &&
+            uiState.cloudTestResult != CloudTestResult.TESTING
+        val canConfirm = uiState.cloudTestResult == CloudTestResult.SUCCESS
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                // Neither is a selection — they are two actions that happen to be
+                // connected visually. `selected = false` on both keeps the group from
+                // claiming one of them is the current state.
+                selected = false,
                 onClick = onTestConnection,
-                enabled = uiState.cloudBaseUrl.isNotBlank()
-                    && uiState.cloudApiKey.isNotBlank()
-                    && uiState.cloudModelName.isNotBlank()
-                    && uiState.cloudTestResult != CloudTestResult.TESTING
-            ) {
-                Text("Test")
-            }
-
-            when (uiState.cloudTestResult) {
-                CloudTestResult.TESTING -> CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                CloudTestResult.SUCCESS -> Text("Connected!", color = MaterialTheme.colorScheme.primary)
-                CloudTestResult.FAILED -> Text("Failed", color = MaterialTheme.colorScheme.error)
-                null -> {}
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Button(
+                enabled = canTest,
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                label = { Text("Test") }
+            )
+            SegmentedButton(
+                selected = false,
                 onClick = onConfirm,
-                enabled = uiState.cloudTestResult == CloudTestResult.SUCCESS
-            ) {
-                Text("Use Cloud")
-            }
+                enabled = canConfirm,
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                label = { Text("Use cloud") }
+            )
+        }
+
+        // Kept as its own row below the group. Inside it, a "Failed" label would sit
+        // where a third action goes and read as one.
+        when (uiState.cloudTestResult) {
+            CloudTestResult.TESTING -> CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            CloudTestResult.SUCCESS -> Text(
+                text = "Connected",
+                style = MaterialTheme.typography.bodySmall,
+                color = OneMindSuccess
+            )
+            CloudTestResult.FAILED -> Text(
+                text = "Failed",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            null -> Unit
         }
     }
 }
@@ -299,24 +374,45 @@ private fun StorageSection(
     storageUsedBytes: Long,
     onDeleteCached: () -> Unit
 ) {
-    Column {
-        Text("Storage", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        val storageMb = storageUsedBytes / (1024 * 1024)
-        Text(
-            text = "Cached models: $storageMb MB",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedButton(
-            onClick = onDeleteCached,
-            enabled = storageUsedBytes > 0
+    SettingsSection(label = "Storage") {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
-            Text("Delete cached models")
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val storageMb = storageUsedBytes / (1024 * 1024)
+                Text(
+                    text = "Cached models · $storageMb MB",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Memories and embeddings never leave this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Surface(
+                    onClick = onDeleteCached,
+                    enabled = storageUsedBytes > 0,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        text = "Delete cached models",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp)
+                    )
+                }
+            }
         }
     }
 }
