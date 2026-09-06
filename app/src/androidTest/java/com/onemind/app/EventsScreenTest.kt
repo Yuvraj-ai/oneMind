@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.onemind.app.domain.model.DetectedEvent
 import com.onemind.app.domain.model.EventStatus
 import com.onemind.app.domain.repository.EventRepository
+import com.onemind.app.ui.components.SectionDestination
 import com.onemind.app.ui.events.EventsScreen
 import com.onemind.app.ui.events.EventsViewModel
 import com.onemind.app.ui.theme.OneMindTheme
@@ -32,20 +33,22 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * That the Events screen stays out from under the system status bar, and can be
- * left.
+ * That the Events screen stays out from under the system status bar, can be left, and
+ * offers the section group — plus the four card states' actions.
  *
- * `MainActivity` calls `enableEdgeToEdge()`, so every destination owns its own
- * window insets. Every other screen gets that for free from a `Scaffold` with a
- * `TopAppBar`, which consumes the status bar inset. `EventsScreen` shipped in
- * 3f6f0a8 as a bare `LazyColumn` with 16.dp of content padding — less than the
- * status bar — so its "Upcoming" header drew on top of the system clock.
+ * `MainActivity` calls `enableEdgeToEdge()`, so every destination owns its own window
+ * insets. `EventsScreen` shipped in 3f6f0a8 with no top bar and 16.dp of content padding —
+ * less than the status bar — so its first row drew on top of the system clock, and it had
+ * no back affordance at all. #37 fixed both with a `Scaffold` + `TopAppBar`.
  *
- * The same omission left it with no back affordance, alone among pushed
- * destinations. One `Scaffold` fixes both, which is why both are pinned here.
+ * The redesign (#I) removed that Scaffold: `PhoneFrame` + `HeroHeader` consume the inset
+ * now, and the back arrow lives in the hero's `leading` slot. The status-bar assertion
+ * therefore follows the mechanism onto the hero title rather than being retired with the
+ * header it was written against — retiring the guard with the thing it guards is how a
+ * fixed defect comes back.
  *
- * The project's first Compose UI test. The bug was originally found by rendering
- * the screen and looking at it; this is that observation made repeatable.
+ * The project's first Compose UI test. The bug was originally found by rendering the screen
+ * and looking at it; this is that observation made repeatable.
  */
 @RunWith(AndroidJUnit4::class)
 class EventsScreenTest {
@@ -55,11 +58,13 @@ class EventsScreenTest {
 
     private lateinit var repository: FakeEventRepository
     private var backPresses = 0
+    private var lastSection: SectionDestination? = null
 
     @Before
     fun setup() {
         repository = FakeEventRepository()
         backPresses = 0
+        lastSection = null
     }
 
     /**
@@ -86,6 +91,7 @@ class EventsScreenTest {
                 EventsScreen(
                     onNavigateToMemory = {},
                     onNavigateBack = { backPresses++ },
+                    onNavigateToSection = { lastSection = it },
                     viewModel = viewModel
                 )
             }
@@ -106,7 +112,7 @@ class EventsScreenTest {
     }
 
     @Test
-    fun theUpcomingHeaderDoesNotDrawUnderTheStatusBar() {
+    fun theHeroDoesNotDrawUnderTheStatusBar() {
         repository.emitUpcoming(listOf(event("Dentist on Thursday")))
 
         renderScreen()
@@ -118,11 +124,15 @@ class EventsScreenTest {
             statusBar > 0f
         )
 
-        val headerTop = composeRule.onNodeWithText("Upcoming").getBoundsInRoot().top
+        // The Scaffold + TopAppBar that used to consume this inset is gone; HeroHeader
+        // consumes it now. #37 was this screen drawing its first row over the system
+        // clock, and the mechanism that prevented it has been replaced — so the assertion
+        // moves to the new first row rather than being retired with the old one.
+        val heroTop = composeRule.onNodeWithText("Things coming up").getBoundsInRoot().top
         assertTrue(
-            "\"Upcoming\" starts at ${headerTop.value}dp, inside the " +
+            "\"Things coming up\" starts at ${heroTop.value}dp, inside the " +
                 "${statusBar}dp status bar — it is drawing over the system clock",
-            headerTop.value >= statusBar
+            heroTop.value >= statusBar
         )
     }
 
@@ -145,8 +155,27 @@ class EventsScreenTest {
         // opened Events before saving anything with a date.
         renderScreen()
 
-        composeRule.onNodeWithText("Events").assertIsDisplayed()
+        // "Events" used to be the top bar's title. It is now the segmented group's third
+        // segment, which happens to render the same string — so asserting on it would keep
+        // passing while meaning something else entirely. Assert the hero and the empty
+        // state, which are what this screen owes a user who has saved nothing yet.
+        composeRule.onNodeWithText("Things coming up").assertIsDisplayed()
         composeRule.onNodeWithText("No upcoming events").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Back").performClick()
+        assertEquals(1, backPresses)
+    }
+
+    @Test
+    fun theSectionGroupIsOfferedAlongsideTheWayBack() {
+        repository.emitUpcoming(listOf(event("Dentist on Thursday")))
+        renderScreen()
+
+        composeRule.onNodeWithText("Feed").performClick()
+        composeRule.waitForIdle()
+        assertEquals(SectionDestination.FEED, lastSection)
+
+        // And the arrow is still there. The group moves between peers; it does not leave,
+        // and #37 was this screen having no way out.
         composeRule.onNodeWithContentDescription("Back").performClick()
         assertEquals(1, backPresses)
     }

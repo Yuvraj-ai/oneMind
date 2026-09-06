@@ -80,7 +80,8 @@ fun OneMindNavHost(
                 onNavigateToMemory = { memoryId ->
                     navController.navigate(NavRoutes.memoryDetail(memoryId))
                 },
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSection = navController::navigateToSection
             )
         }
 
