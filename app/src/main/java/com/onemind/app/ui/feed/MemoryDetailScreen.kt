@@ -141,13 +141,15 @@ private fun MemoryDetailContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(256.dp)
-                    // Mirrors the summary block's odd corner on the opposite side, so
-                    // the two read as a pair rather than as one styled panel and one
-                    // rounded rectangle.
+                    // The reference (`styles.css` `.image-placeholder`) puts the tight
+                    // corner at bottom-right, on the same (right) edge as the summary
+                    // block's top-right notch, so the two panels share a vertical edge
+                    // treatment rather than reading as one styled panel and one rounded
+                    // rectangle.
                     .clip(
                         RoundedCornerShape(
                             topStart = 40.dp, topEnd = 40.dp,
-                            bottomEnd = 40.dp, bottomStart = 16.dp
+                            bottomEnd = 16.dp, bottomStart = 40.dp
                         )
                     )
                     .background(EmberGradient)
