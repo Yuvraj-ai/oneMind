@@ -1,8 +1,10 @@
 package com.onemind.app
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -33,7 +35,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Both bars are styled for a dark background rather than left to
+        // `systemDefault()`, which picks its icon tint from the system's night setting.
+        // `OneMindTheme` is dark-first and ignores that setting, so on a device in light
+        // mode the default gave dark icons over the ember background — a clock and a
+        // battery meter that were very nearly invisible. Transparent scrims because the
+        // app draws its own background behind both bars.
+        //
+        // This is coupled to `OneMindTheme`'s `darkTheme = true` default by hand.
+        // `enableEdgeToEdge` runs in `onCreate`, outside composition, so it cannot read
+        // the theme; if the theme ever gains a real light mode, the bars have to be
+        // driven from composition instead.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+        )
 
         pendingMemoryId = extractMemoryId(intent)
 

@@ -6,13 +6,15 @@ import androidx.work.Configuration
 import com.onemind.app.capture.NotificationChannels
 import com.onemind.app.data.ai.ProviderRestorer
 import com.onemind.app.data.events.EventReminderScheduler
-import com.onemind.app.data.local.dao.EventDao
 import com.onemind.app.data.processing.StaleProcessingSweeper
+import com.onemind.app.domain.repository.EventRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.time.Clock
+import java.time.Instant
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -32,10 +34,13 @@ class OneMindApplication : Application(), Configuration.Provider {
     lateinit var staleProcessingSweeper: StaleProcessingSweeper
 
     @Inject
-    lateinit var eventDao: EventDao
+    lateinit var events: EventRepository
 
     @Inject
     lateinit var eventReminderScheduler: EventReminderScheduler
+
+    @Inject
+    lateinit var clock: Clock
 
     /**
      * Application-lifetime scope for start-up work.
@@ -63,7 +68,7 @@ class OneMindApplication : Application(), Configuration.Provider {
             staleProcessingSweeper.sweep()
 
             // Expire past-due events and schedule reminders for any new ones.
-            eventDao.expireOverdue(java.time.Instant.now().toEpochMilli())
+            events.expireOverdue(Instant.now(clock))
             eventReminderScheduler.scheduleAll()
         }
     }

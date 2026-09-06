@@ -1,18 +1,26 @@
 package com.onemind.app.ui.onboarding
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.onemind.app.domain.model.LlmCapability
 import com.onemind.app.domain.model.ModelInfo
+import com.onemind.app.ui.components.HeroHeader
+import com.onemind.app.ui.components.PhoneFrame
+import com.onemind.app.ui.components.StatusPill
+import com.onemind.app.ui.theme.PillShape
 
 @Composable
 fun ModelSelectionScreen(
@@ -31,45 +39,47 @@ fun ModelSelectionScreen(
         return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-    ) {
-        Text(
-            text = "Choose your AI model",
-            style = MaterialTheme.typography.headlineMedium
+    PhoneFrame {
+        // No `leading` back arrow: this screen's signature carries no back callback and it
+        // is reached straight from the welcome step, so there is nothing to navigate back
+        // to without adding state the constraints forbid. Recorded as a deviation.
+        HeroHeader(
+            eyebrow = "Runs on this device",
+            title = "Pick a mind"
         )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Select a local model to run on your device. Larger models are smarter but need more storage and RAM.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (isMeteredNetwork) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(
-                    text = "You're on mobile data. Consider using WiFi for the download.",
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                Text(
+                    text = "Select a local model to run on your device. Larger models are smarter but need more storage and RAM.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isMeteredNetwork) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "You're on mobile data. Consider using WiFi for the download.",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
             items(models) { model ->
                 ModelCard(
                     model = model,
@@ -80,23 +90,40 @@ fun ModelSelectionScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = onStartDownload,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = selectedModel != null
+        // Sticky CTA: a 56 dp-tall pill in `primary`, pinned below the scrolling list with
+        // the navigation-bar inset, per `onboarding.html`.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Download & Continue")
-        }
+            Button(
+                onClick = onStartDownload,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = PillShape,
+                enabled = selectedModel != null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                Text(
+                    text = selectedModel?.let { "Download ${it.displayName}" }
+                        ?: "Download & Continue",
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TextButton(
-            onClick = onChooseCloud,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Use a cloud provider instead")
+            TextButton(
+                onClick = onChooseCloud,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Use a cloud provider instead")
+            }
         }
     }
 }
@@ -164,6 +191,18 @@ private fun NoLocalModelsScreen(onChooseCloud: () -> Unit, onSkip: () -> Unit) {
     }
 }
 
+/**
+ * One model, as a selectable pill row.
+ *
+ * The size badge on the left is the reference's idea and a good one: parameter count is the
+ * single number that decides whether a model will run acceptably on a given phone, and
+ * putting it in a fixed 48 dp slot makes six models comparable at a glance in a way three
+ * metadata strings per row do not.
+ *
+ * The download icon appears only on the selected row. On every row it would read as six
+ * things to download rather than one choice to confirm — and the sticky CTA below is what
+ * actually starts the download.
+ */
 @Composable
 private fun ModelCard(
     model: ModelInfo,
@@ -171,68 +210,99 @@ private fun ModelCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val borderColor = when {
-        isSelected -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.outlineVariant
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(2.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        }
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                }
             ) {
-                Text(
-                    text = model.displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
-                )
-
-                if (isRecommended) {
-                    SuggestionChip(
-                        onClick = { },
-                        label = { Text("Recommended", style = MaterialTheme.typography.labelSmall) }
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "${formatParams(model.parameterCountB)}B",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = model.displayName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    if (isRecommended) {
+                        StatusPill(
+                            label = "Recommended",
+                            container = MaterialTheme.colorScheme.tertiary,
+                            content = MaterialTheme.colorScheme.onTertiary
+                        )
+                    }
+                }
                 Text(
-                    text = "${model.parameterCountB}B params",
+                    // One line instead of three separate metadata strings: size, format,
+                    // and whether it can see. Everything that changes a decision, nothing
+                    // that does not.
+                    text = buildString {
+                        append("${model.downloadSizeMb} MB · ${model.quantizationFormat}")
+                        if (model.capabilities.contains(LlmCapability.VISION)) {
+                            append(" · understands images")
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${model.downloadSizeMb} MB",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = model.quantizationFormat,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
             }
 
-            if (model.capabilities.contains(LlmCapability.VISION)) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Supports vision (image understanding)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
         }
     }
 }
+
+/**
+ * Render a parameter count as the reference does: "1B", "1.5B", "2B" — a whole number when
+ * the fraction is zero, one decimal place otherwise. `parameterCountB` is a `Float`, so the
+ * naive `"$it"` prints "1.0B"; this is formatting only and does not change the model.
+ */
+internal fun formatParams(count: Float): String =
+    if (count == count.toLong().toFloat()) count.toLong().toString() else count.toString()

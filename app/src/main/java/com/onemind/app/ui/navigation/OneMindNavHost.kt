@@ -11,7 +11,9 @@ import com.onemind.app.ui.composer.ComposerScreen
 import com.onemind.app.ui.events.EventsScreen
 import com.onemind.app.ui.feed.FeedScreen
 import com.onemind.app.ui.feed.MemoryDetailScreen
+import com.onemind.app.ui.feed.TimelineScreen
 import com.onemind.app.ui.onboarding.OnboardingScreen
+import com.onemind.app.ui.search.SearchScreen
 import com.onemind.app.ui.settings.SettingsScreen
 
 /**
@@ -50,9 +52,26 @@ fun OneMindNavHost(
                 onNavigateToSettings = {
                     navController.navigate(NavRoutes.SETTINGS)
                 },
-                onNavigateToEvents = {
-                    navController.navigate(NavRoutes.EVENTS)
-                }
+                onNavigateToSection = navController::navigateToSection,
+                onNavigateToSearch = { navController.navigate(NavRoutes.SEARCH) }
+            )
+        }
+
+        composable(NavRoutes.TIMELINE) {
+            TimelineScreen(
+                onNavigateToMemory = { memoryId ->
+                    navController.navigate(NavRoutes.memoryDetail(memoryId))
+                },
+                onNavigateToSection = navController::navigateToSection
+            )
+        }
+
+        composable(NavRoutes.SEARCH) {
+            SearchScreen(
+                onNavigateToMemory = { memoryId ->
+                    navController.navigate(NavRoutes.memoryDetail(memoryId))
+                },
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
@@ -60,7 +79,9 @@ fun OneMindNavHost(
             EventsScreen(
                 onNavigateToMemory = { memoryId ->
                     navController.navigate(NavRoutes.memoryDetail(memoryId))
-                }
+                },
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSection = navController::navigateToSection
             )
         }
 

@@ -1,7 +1,9 @@
 package com.onemind.app.ui.feed
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +30,10 @@ import com.onemind.app.domain.model.ContentBlock
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.processing.StageStatus
+import com.onemind.app.ui.components.CategoryChips
+import com.onemind.app.ui.theme.CardShapeLarge
+import com.onemind.app.ui.theme.EmberGradient
+import com.onemind.app.ui.theme.Tracking
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -132,6 +138,26 @@ private fun MemoryDetailContent(
 
         CategoryChips(categories = memory.derived.categories)
 
+        if (memory.imageBlocks().isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(256.dp)
+                    // The reference (`styles.css` `.image-placeholder`) puts the tight
+                    // corner at bottom-right, on the same (right) edge as the summary
+                    // block's top-right notch, so the two panels share a vertical edge
+                    // treatment rather than reading as one styled panel and one rounded
+                    // rectangle.
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 40.dp, topEnd = 40.dp,
+                            bottomEnd = 16.dp, bottomStart = 40.dp
+                        )
+                    )
+                    .background(EmberGradient)
+            )
+        }
+
         // Source
         SourceRow(memory = memory)
 
@@ -165,108 +191,143 @@ private fun ExtractedMetadataSection(memory: Memory) {
 
     if (urls.isEmpty() && dates.isEmpty() && entities.isEmpty()) return
 
-    Spacer(modifier = Modifier.height(8.dp))
-    HorizontalDivider()
-    Spacer(modifier = Modifier.height(8.dp))
-
     if (urls.isNotEmpty()) {
-        MetadataLabel("Links")
-        val context = LocalContext.current
-        urls.forEach { url ->
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Links were rendered as inert text, which made the whole
-                    // URL-extraction stage terminate in something the user could look
-                    // at and not use.
-                    .clickable { openUrl(context, url.rawUrl) }
-                    .semantics { role = Role.Button }
+        // "Links", from `memory.html`. Each of the three metadata groups gets its own
+        // DetailSection shell rather than one shared panel, so a Memory with only links
+        // does not show empty headers for dates and mentions.
+        DetailSection(title = "Links") {
+            val context = LocalContext.current
+            urls.forEach { url ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Links were rendered as inert text, which made the whole
+                        // URL-extraction stage terminate in something the user could look
+                        // at and not use.
+                        .clickable { openUrl(context, url.rawUrl) }
+                        .semantics { role = Role.Button }
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = url.domain,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = url.rawUrl,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (dates.isNotEmpty()) {
+        DetailSection(title = "Dates mentioned") {
+            dates.forEach { date ->
+                Text(
+                    text = date.rawText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+
+    if (entities.isNotEmpty()) {
+        DetailSection(title = "Mentioned") {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = url.domain,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = url.rawUrl,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                entities.forEach { entity ->
+                    SuggestionChip(
+                        onClick = { },
+                        label = {
+                            Text(entity.name, style = MaterialTheme.typography.labelSmall)
+                        }
                     )
                 }
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
     }
+}
 
-    if (dates.isNotEmpty()) {
-        MetadataLabel("Dates mentioned")
-        dates.forEach { date ->
-            Text(
-                text = date.rawText,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-    }
-
-    if (entities.isNotEmpty()) {
-        MetadataLabel("Mentioned")
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            entities.forEach { entity ->
-                SuggestionChip(
-                    onClick = { },
-                    label = {
-                        Text(entity.name, style = MaterialTheme.typography.labelSmall)
-                    }
+/**
+ * The shared shell for a detail section.
+ *
+ * One composable rather than the same `Surface` written three times, so the three sections
+ * cannot drift apart — which they had already started to, at 12 dp, 16 dp and no corner
+ * respectively.
+ */
+@Composable
+private fun DetailSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = {
+                // The app-wide section eyebrow: uppercase, tracked, muted — the same
+                // recipe HeroHeader and Settings' SettingsSection use, and what
+                // `memory.html` `.detail-section h2` specifies.
+                Text(
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = Tracking.Eyebrow,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                content()
             }
-        }
+        )
     }
 }
 
 @Composable
 private fun SummarySection(memory: Memory) {
     val summary = memory.derived.summary ?: return
+    // Keep the original blank-text guard as well as the status check: dropping it would
+    // render an empty styled panel, which is a behaviour change this restyle must not make.
     if (summary.status != StageStatus.SUCCESS || summary.summaryText.isBlank()) return
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        // 2.5rem everywhere but the top-right, per `memory.html`. The one odd corner is
+        // the brand signature and is not a rounding of the others — the shared
+        // `CardShapeLarge` token so the silhouette cannot drift.
+        shape = CardShapeLarge,
+        color = MaterialTheme.colorScheme.primaryContainer
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Text(
                 text = summary.summaryText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
-            summary.providerModel?.let { model ->
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "summarised by $model",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
+            // Names the model and says where it ran. Quieter than the summary because it
+            // is provenance, not content — but present, because "on device" is a claim
+            // this app makes and should keep visible.
+            Text(
+                text = buildString {
+                    val model = summary.providerModel
+                    if (model != null) append("summarised by $model · ") else append("summarised ")
+                    append("on device")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            )
         }
     }
-}
-
-@Composable
-private fun MetadataLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Spacer(modifier = Modifier.height(4.dp))
 }
 
 @Composable
@@ -280,37 +341,23 @@ private fun RecognizedTextSection(memory: Memory) {
     val allEmpty = ocrResults.all { it.status == StageStatus.EMPTY }
     val allFailed = ocrResults.all { it.status == StageStatus.FAILED }
 
-    Spacer(modifier = Modifier.height(8.dp))
-    HorizontalDivider()
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text(
-        text = "Text in images",
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-
-    when {
-        withText.isNotEmpty() -> {
-            withText.forEach { result ->
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+    // "Text in images", from `memory.html`.
+    DetailSection(title = "Text in images") {
+        when {
+            withText.isNotEmpty() -> {
+                withText.forEach { result ->
                     Text(
                         text = result.extractedText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(12.dp)
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
+            // Say which of the three it is. "No text found" and "could not read the
+            // image" are different facts and the user can act on the second one.
+            allEmpty -> StatusNote("No text found in these images.")
+            allFailed -> StatusNote("Could not read these images.")
+            else -> StatusNote("No text found.")
         }
-        // Say which of the three it is. "No text found" and "could not read the
-        // image" are different facts and the user can act on the second one.
-        allEmpty -> StatusNote("No text found in these images.")
-        allFailed -> StatusNote("Could not read these images.")
-        else -> StatusNote("No text found.")
     }
 }
 
@@ -323,31 +370,18 @@ private fun ImageDescriptionSection(memory: Memory) {
         it.status == StageStatus.SUCCESS && it.description.isNotBlank()
     }
 
-    Spacer(modifier = Modifier.height(8.dp))
-    HorizontalDivider()
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text(
-        text = "Image description",
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-
-    when {
-        described.isNotEmpty() -> {
-            described.forEach { result ->
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+    // "Source content", from `memory.html` — where the prose under that heading is a
+    // description of the captured image, which is exactly what this section renders.
+    DetailSection(title = "Source content") {
+        when {
+            described.isNotEmpty() -> {
+                described.forEach { result ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             text = result.description,
                             style = MaterialTheme.typography.bodyMedium
                         )
                         result.providerModel?.let { model ->
-                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "by $model",
                                 style = MaterialTheme.typography.labelSmall,
@@ -357,14 +391,14 @@ private fun ImageDescriptionSection(memory: Memory) {
                     }
                 }
             }
+            // These three are genuinely different facts. Only the first is something
+            // the user can act on, by choosing a vision-capable model.
+            visionResults.all { it.status == StageStatus.NOT_SUPPORTED } ->
+                StatusNote("Vision unavailable with your current model.")
+            visionResults.all { it.status == StageStatus.FAILED } ->
+                StatusNote("Could not describe these images.")
+            else -> StatusNote("No description produced.")
         }
-        // These three are genuinely different facts. Only the first is something
-        // the user can act on, by choosing a vision-capable model.
-        visionResults.all { it.status == StageStatus.NOT_SUPPORTED } ->
-            StatusNote("Vision unavailable with your current model.")
-        visionResults.all { it.status == StageStatus.FAILED } ->
-            StatusNote("Could not describe these images.")
-        else -> StatusNote("No description produced.")
     }
 }
 

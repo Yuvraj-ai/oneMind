@@ -1,5 +1,6 @@
 package com.onemind.app.data.repository
 
+import com.onemind.app.data.events.EventReminderScheduler
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.MemoryDao
@@ -8,8 +9,10 @@ import com.onemind.app.data.local.entity.CategoryMapper
 import com.onemind.app.data.local.entity.DerivedMapper
 import com.onemind.app.data.local.entity.EntityMapper.toDomain
 import com.onemind.app.data.local.entity.EntityMapper.toEntity
+import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.domain.model.Category
 import com.onemind.app.domain.model.DerivedData
+import com.onemind.app.domain.model.ExtractedEntity
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.repository.InvalidStateTransitionException
@@ -25,7 +28,9 @@ class MemoryRepositoryImpl @Inject constructor(
     private val memoryDao: MemoryDao,
     private val derivedDataDao: DerivedDataDao,
     private val categoryDao: CategoryDao,
-    private val searchIndexDao: SearchIndexDao
+    private val searchIndexDao: SearchIndexDao,
+    private val eventReminderScheduler: EventReminderScheduler,
+    private val processingScheduler: ProcessingScheduler
 ) : MemoryRepository {
 
     /**
@@ -123,6 +128,19 @@ class MemoryRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getEntitiesByMemoryIds(ids: List<Long>): Map<Long, List<ExtractedEntity>> {
+        if (ids.isEmpty()) return emptyMap()
+
+        // Chunked for the same reason every other batched read here is: Room expands
+        // `IN (:ids)` to one bind parameter per element and SQLite caps those at 999.
+        return with(DerivedMapper) {
+            ids.chunked(SQL_VARIABLE_LIMIT)
+                .flatMap { derivedDataDao.getEntitiesForMemories(it) }
+                .map { it.toDomain() }
+                .groupBy { it.memoryId }
+        }
+    }
+
     override suspend fun createMemory(memory: Memory): Long {
         val entity = memory.toEntity()
         val blockEntities = memory.contentBlocks.mapIndexed { index, block ->
@@ -146,6 +164,22 @@ class MemoryRepositoryImpl @Inject constructor(
         // alone, the deleted Memory's text stays matchable — a privacy problem, and
         // one that also crowds genuine matches out of the query's LIMIT.
         searchIndexDao.delete(id)
+
+        // Reminders are the same shape of problem one step further out: they are not
+        // rows at all, so nothing in the database can reach them. v0.1.2 deleted the
+        // Memory and left them queued, and days later one would fire a notification
+        // about something the user had already thrown away. Cancelling here rather
+        // than at the delete button covers the other delete path too — the composer
+        // removes a Memory the user has emptied out, and that Memory can have been
+        // enriched and have events.
+        eventReminderScheduler.cancelForMemory(id)
+
+        // And the enrichment that has not run yet, for the same reason. Cancelling
+        // before the row goes closes the race the other order leaves open: a worker
+        // that starts in the gap enriches a Memory on its way out and writes derived
+        // rows against an id that is about to disappear.
+        processingScheduler.cancel(id)
+
         memoryDao.deleteMemory(id)
     }
 

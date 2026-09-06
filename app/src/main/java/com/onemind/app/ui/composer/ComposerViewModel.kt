@@ -8,8 +8,10 @@ import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.data.storage.ImageFileStorage
 import com.onemind.app.domain.model.*
 import com.onemind.app.domain.repository.MemoryRepository
+import com.onemind.app.di.ApplicationScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +27,14 @@ class ComposerViewModel @Inject constructor(
     private val memoryRepository: MemoryRepository,
     private val imageFileStorage: ImageFileStorage,
     private val processingScheduler: ProcessingScheduler,
+    /**
+     * Process-lifetime scope, for the commit on the way out.
+     *
+     * See [onLeaveComposer]. Not used for anything else here — everything that serves a
+     * screen the user is still looking at belongs in `viewModelScope`, where being
+     * cancelled on departure is correct.
+     */
+    @ApplicationScope private val appScope: CoroutineScope,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -139,10 +149,25 @@ class ComposerViewModel @Inject constructor(
      * alone deliberately does not trigger processing: the user should be able to
      * keep adding to a draft without competing with background work.
      */
+    /**
+     * Commit whatever is in the composer, on the way out.
+     *
+     * Runs on [appScope], not `viewModelScope`, and that is the whole point.
+     * `ComposerScreen.handleBack` calls this and then navigates back in the same function;
+     * the pop clears this ViewModel and cancels `viewModelScope` while the commit is still
+     * in flight. Every `suspend` call below is a cancellation point, and
+     * `processingScheduler.enqueue` sits behind four of them — so it was the statement that
+     * essentially never ran. Memories were written, usually reached `SAVED`, and were then
+     * never enriched, indexed or searchable, while share and clipboard capture worked fine
+     * because those paths enqueue from a scope nothing cancels. Issue #50.
+     *
+     * `autoSaveJob` is still cancelled against this ViewModel: that job exists to serve a
+     * screen that is going away, and abandoning it is correct.
+     */
     fun onLeaveComposer() {
         autoSaveJob?.cancel()
 
-        viewModelScope.launch {
+        appScope.launch {
             val state = _uiState.value
             if (state.text.isBlank() && state.imagePaths.isEmpty()) {
                 // Nothing to save — if we had a draft, delete it

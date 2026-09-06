@@ -1,5 +1,6 @@
 package com.onemind.app
 
+import com.onemind.app.data.events.EventReminderScheduler
 import com.onemind.app.data.local.dao.CategoryDao
 import com.onemind.app.data.local.dao.DerivedDataDao
 import com.onemind.app.data.local.dao.SearchIndexDao
@@ -7,6 +8,7 @@ import com.onemind.app.data.local.dao.MemoryDao
 import com.onemind.app.data.local.entity.ContentBlockEntity
 import com.onemind.app.data.local.entity.MemoryEntity
 import com.onemind.app.data.local.entity.MemoryWithBlocks
+import com.onemind.app.data.processing.ProcessingScheduler
 import com.onemind.app.data.repository.MemoryRepositoryImpl
 import com.onemind.app.domain.model.*
 import com.onemind.app.domain.repository.InvalidStateTransitionException
@@ -25,6 +27,8 @@ class MemoryRepositoryTest {
     private lateinit var derivedDataDao: DerivedDataDao
     private lateinit var categoryDao: CategoryDao
     private lateinit var searchIndexDao: SearchIndexDao
+    private lateinit var eventReminderScheduler: EventReminderScheduler
+    private lateinit var processingScheduler: ProcessingScheduler
     private lateinit var repository: MemoryRepositoryImpl
 
     @Before
@@ -33,8 +37,11 @@ class MemoryRepositoryTest {
         derivedDataDao = mockk(relaxed = true)
         categoryDao = mockk(relaxed = true)
         searchIndexDao = mockk(relaxed = true)
+        eventReminderScheduler = mockk(relaxed = true)
+        processingScheduler = mockk(relaxed = true)
         repository = MemoryRepositoryImpl(
-            memoryDao, derivedDataDao, categoryDao, searchIndexDao
+            memoryDao, derivedDataDao, categoryDao, searchIndexDao,
+            eventReminderScheduler, processingScheduler
         )
     }
 
@@ -47,6 +54,30 @@ class MemoryRepositoryTest {
 
         coVerify { searchIndexDao.delete(7L) }
         coVerify { memoryDao.deleteMemory(7L) }
+    }
+
+    @Test
+    fun `deleting a memory also cancels its pending reminders`() = runTest {
+        // Same class of problem as the search index row above: WorkManager jobs are
+        // not in the database, so no foreign key reaches them. v0.1.2 deleted the
+        // Memory and left its reminders enqueued, and one of them would later fire a
+        // notification about a Memory the user had thrown away.
+        repository.deleteMemory(7L)
+
+        verify { eventReminderScheduler.cancelForMemory(7L) }
+    }
+
+    @Test
+    fun `deleting a memory also cancels its queued enrichment`() = runTest {
+        // The third thing that does not cascade, and the last one that was still
+        // being cleaned up in a ViewModel instead. The composer deletes a Memory the
+        // user has emptied out and used to leave its enrichment queued: the worker
+        // would start on a Memory that no longer exists, or — the race that actually
+        // costs something — start just before the delete lands and write derived rows
+        // against an id on its way out.
+        repository.deleteMemory(7L)
+
+        verify { processingScheduler.cancel(7L) }
     }
 
     @Test
