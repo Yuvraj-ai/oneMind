@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,6 +25,8 @@ import com.onemind.app.domain.model.LlmCapability
 import com.onemind.app.ui.components.HeroHeader
 import com.onemind.app.ui.components.PhoneFrame
 import com.onemind.app.ui.onboarding.CloudTestResult
+import com.onemind.app.ui.onboarding.formatParams
+import com.onemind.app.ui.theme.CardShapeLarge
 import com.onemind.app.ui.theme.OneMindSuccess
 import com.onemind.app.ui.theme.Tracking
 
@@ -148,10 +149,9 @@ private fun CurrentProviderSection(
     SettingsSection(label = "Active AI provider") {
         Surface(
             color = MaterialTheme.colorScheme.primaryContainer,
-            // The summary-block treatment: 40 dp corners except 16 dp top-right.
-            shape = RoundedCornerShape(
-                topStart = 40.dp, topEnd = 16.dp, bottomEnd = 40.dp, bottomStart = 40.dp
-            ),
+            // The summary-block treatment: the shared `CardShapeLarge` token (40 dp
+            // corners except 16 dp top-right).
+            shape = CardShapeLarge,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -451,7 +451,7 @@ private fun ModelPickerDialog(
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Text(
-                                    text = "${model.parameterCountB}B · ${model.downloadSizeMb} MB" +
+                                    text = "${formatParams(model.parameterCountB)}B · ${model.downloadSizeMb} MB" +
                                         if (model.capabilities.contains(LlmCapability.VISION)) " · Vision" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant

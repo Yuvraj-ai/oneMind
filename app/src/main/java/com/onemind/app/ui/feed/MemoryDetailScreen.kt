@@ -31,7 +31,9 @@ import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.processing.StageStatus
 import com.onemind.app.ui.components.CategoryChips
+import com.onemind.app.ui.theme.CardShapeLarge
 import com.onemind.app.ui.theme.EmberGradient
+import com.onemind.app.ui.theme.Tracking
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -273,10 +275,14 @@ private fun DetailSection(title: String, content: @Composable ColumnScope.() -> 
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             content = {
+                // The app-wide section eyebrow: uppercase, tracked, muted — the same
+                // recipe HeroHeader and Settings' SettingsSection use, and what
+                // `memory.html` `.detail-section h2` specifies.
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = Tracking.Eyebrow,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 content()
             }
@@ -294,10 +300,9 @@ private fun SummarySection(memory: Memory) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         // 2.5rem everywhere but the top-right, per `memory.html`. The one odd corner is
-        // the brand signature and is not a rounding of the others.
-        shape = RoundedCornerShape(
-            topStart = 40.dp, topEnd = 16.dp, bottomEnd = 40.dp, bottomStart = 40.dp
-        ),
+        // the brand signature and is not a rounding of the others — the shared
+        // `CardShapeLarge` token so the silhouette cannot drift.
+        shape = CardShapeLarge,
         color = MaterialTheme.colorScheme.primaryContainer
     ) {
         Column(

@@ -304,5 +304,5 @@ private fun ModelCard(
  * the fraction is zero, one decimal place otherwise. `parameterCountB` is a `Float`, so the
  * naive `"$it"` prints "1.0B"; this is formatting only and does not change the model.
  */
-private fun formatParams(count: Float): String =
+internal fun formatParams(count: Float): String =
     if (count == count.toLong().toFloat()) count.toLong().toString() else count.toString()
