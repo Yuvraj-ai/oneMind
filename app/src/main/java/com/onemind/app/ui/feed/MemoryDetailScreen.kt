@@ -1,16 +1,22 @@
 package com.onemind.app.ui.feed
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,72 +35,303 @@ import coil.request.ImageRequest
 import com.onemind.app.domain.model.ContentBlock
 import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
+import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.domain.processing.StageStatus
 import com.onemind.app.ui.components.CategoryChips
-import com.onemind.app.ui.theme.CardShapeLarge
+import com.onemind.app.ui.components.ExpressiveIconButton
+import com.onemind.app.ui.components.ExpressiveTopBar
+import com.onemind.app.ui.components.PhoneFrame
+import com.onemind.app.ui.components.StateChip
 import com.onemind.app.ui.theme.EmberGradient
+import com.onemind.app.ui.theme.PillShape
 import com.onemind.app.ui.theme.Tracking
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * M3 Expressive Memory Detail Screen matching spec §4.6.
+ *
+ * Features:
+ * - ExpressiveTopBar with Back button, header title, and Share action.
+ * - Hero media frame: 24dp rounded corners, high-resolution Coil image rendering, EmberGradient fallback.
+ * - Metadata and AI blocks: grouped into distinct surfaceContainer cards with 16dp rounded corners.
+ * - Bottom floating action toolbar pill: 100dp pill corners floating at bottom center with
+ *   Edit (filled icon / primaryContainer), Share (tonal icon / secondaryContainer), and
+ *   Delete (standard icon with error tint).
+ * - Delete confirmation dialog with 28dp rounded corners and accessible 48dp action buttons.
+ */
 @Composable
 fun MemoryDetailScreen(
     memoryId: Long,
     onNavigateBack: () -> Unit,
     onNavigateToEdit: (Long) -> Unit,
+    onDeleteMemory: ((Long) -> Unit)? = null,
     viewModel: MemoryDetailViewModel = hiltViewModel()
 ) {
     val memory by viewModel.memory.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(memoryId) {
         viewModel.loadMemory(memoryId)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Memory") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+    PhoneFrame {
+        ExpressiveTopBar(
+            title = "Memory",
+            leading = {
+                ExpressiveIconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+            },
+            trailing = {
+                val currentMemory = memory
+                if (currentMemory != null) {
+                    ExpressiveIconButton(
+                        onClick = { shareMemory(context, currentMemory) }
+                    ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { onNavigateToEdit(memoryId) }) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit"
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share"
                         )
                     }
                 }
-            )
-        }
-    ) { paddingValues ->
+            }
+        )
+
         when (val m = memory) {
             null -> {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
+                        .fillMaxWidth()
+                        .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
                 }
             }
             else -> {
-                MemoryDetailContent(
-                    memory = m,
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    MemoryDetailContent(
+                        memory = m,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Bottom floating action toolbar pill
+                    FloatingActionToolbar(
+                        onEdit = { onNavigateToEdit(m.id) },
+                        onShare = { shareMemory(context, m) },
+                        onDelete = { showDeleteDialog = true },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 16.dp)
+                    )
+
+                    // Delete confirmation dialog with 28dp rounded corners and 48dp action buttons
+                    if (showDeleteDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showDeleteDialog = false },
+                            shape = RoundedCornerShape(28.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            },
+                            title = {
+                                Text(
+                                    text = "Delete memory?",
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = "This memory and any associated local files will be permanently deleted. This action cannot be undone.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showDeleteDialog = false
+                                        if (onDeleteMemory != null) {
+                                            onDeleteMemory(m.id)
+                                        } else {
+                                            viewModel.deleteMemory(m.id)
+                                        }
+                                        onNavigateBack()
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    shape = PillShape,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                        contentColor = MaterialTheme.colorScheme.onError
+                                    )
+                                ) {
+                                    Text("Delete", style = MaterialTheme.typography.labelLarge)
+                                }
+                            },
+                            dismissButton = {
+                                OutlinedButton(
+                                    onClick = { showDeleteDialog = false },
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    shape = PillShape
+                                ) {
+                                    Text("Cancel", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Floating pill toolbar at bottom center with Edit, Share, and Delete actions.
+ */
+@Composable
+private fun FloatingActionToolbar(
+    onEdit: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Edit (filled icon / primaryContainer)
+            ExpressiveIconButton(
+                onClick = onEdit,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit memory"
                 )
             }
+
+            // Share (tonal icon / secondaryContainer)
+            ExpressiveIconButton(
+                onClick = onShare,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = "Share memory"
+                )
+            }
+
+            // Delete (standard icon with error tint)
+            ExpressiveIconButton(
+                onClick = onDelete,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.error
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete memory"
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Hero media frame with 24dp rounded corners, high-resolution Coil image rendering,
+ * and EmberGradient fallback.
+ */
+@Composable
+private fun HeroMediaFrame(
+    block: ContentBlock,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(260.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(EmberGradient)
+    ) {
+        val imageSource = block.content
+        val imageModel = if (imageSource.startsWith("content://") || imageSource.startsWith("file://")) {
+            Uri.parse(imageSource)
+        } else {
+            File(imageSource)
+        }
+
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(imageModel)
+                .crossfade(true)
+                .build(),
+            contentDescription = "Memory image",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+/**
+ * Shared M3 Expressive card container for metadata and AI sections with 16dp rounded corners.
+ */
+@Composable
+private fun DetailCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    icon: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (icon != null) {
+                    icon()
+                }
+                Text(
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = Tracking.Eyebrow,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            content()
         }
     }
 }
@@ -104,108 +341,217 @@ private fun MemoryDetailContent(
     memory: Memory,
     modifier: Modifier = Modifier
 ) {
+    val imageBlocks = memory.imageBlocks()
+
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Timestamp
-        val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.FULL, FormatStyle.SHORT)
-            .withZone(ZoneId.systemDefault())
-        Text(
-            text = formatter.format(memory.createdAt),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        // Timestamp, source, state and category card
+        InfoSection(memory = memory)
 
-        // Source type badge
-        SuggestionChip(
-            onClick = { },
-            label = {
-                Text(
-                    text = memory.sourceType.name.lowercase().replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        )
+        // Hero media frame with 24dp rounded corners
+        if (imageBlocks.isNotEmpty()) {
+            HeroMediaFrame(block = imageBlocks.first())
+        }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Summary first: it says what the Memory is about, which is what the user
-        // needs when scanning. Falls back to raw content when absent.
+        // AI Summary section in surfaceContainer card with 16dp rounded corners
         SummarySection(memory = memory)
 
-        CategoryChips(categories = memory.derived.categories)
-
-        if (memory.imageBlocks().isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(256.dp)
-                    // The reference (`styles.css` `.image-placeholder`) puts the tight
-                    // corner at bottom-right, on the same (right) edge as the summary
-                    // block's top-right notch, so the two panels share a vertical edge
-                    // treatment rather than reading as one styled panel and one rounded
-                    // rectangle.
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 40.dp, topEnd = 40.dp,
-                            bottomEnd = 16.dp, bottomStart = 40.dp
-                        )
+        // User note text blocks
+        val textBlocks = memory.contentBlocks.filter { it.type == ContentType.TEXT }
+        if (textBlocks.isNotEmpty()) {
+            DetailCard(title = "Note") {
+                textBlocks.forEach { block ->
+                    Text(
+                        text = block.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    .background(EmberGradient)
-            )
+                }
+            }
         }
 
-        // Source
-        SourceRow(memory = memory)
-
-        // Content blocks
-        memory.contentBlocks.sortedBy { it.position }.forEach { block ->
-            ContentBlockView(block = block)
+        // Additional images beyond the first hero image
+        if (imageBlocks.size > 1) {
+            imageBlocks.drop(1).forEach { block ->
+                HeroMediaFrame(block = block)
+            }
         }
 
-        // What the pipeline read out of the images. Kept visually distinct from
-        // the content above, because this is a machine's reading of the Memory,
-        // not something the user wrote.
+        // What the pipeline extracted from images and content
         RecognizedTextSection(memory = memory)
         ImageDescriptionSection(memory = memory)
         ExtractedMetadataSection(memory = memory)
+
+        // Clearance spacer for bottom floating toolbar pill
+        Spacer(modifier = Modifier.height(96.dp))
     }
 }
 
-/**
- * Structured metadata the pipeline found.
- *
- * Links appear even when no model is configured, since they are found by regex.
- * Dates keep the wording the user actually saw rather than only a resolved
- * timestamp, because "sometime next spring" is real information that no
- * timestamp captures.
- */
+@Composable
+private fun InfoSection(memory: Memory) {
+    DetailCard(title = "Info") {
+        val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.FULL, FormatStyle.SHORT)
+            .withZone(ZoneId.systemDefault())
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = formatter.format(memory.createdAt),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (memory.processingState != ProcessingState.READY) {
+                StateChip(state = memory.processingState)
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SuggestionChip(
+                onClick = { },
+                label = {
+                    Text(
+                        text = memory.sourceType.name.lowercase().replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            )
+            SourceRow(memory = memory)
+        }
+
+        if (memory.derived.categories.isNotEmpty()) {
+            CategoryChips(categories = memory.derived.categories)
+        }
+    }
+}
+
+@Composable
+private fun SummarySection(memory: Memory) {
+    val summary = memory.derived.summary ?: return
+    if (summary.status != StageStatus.SUCCESS || summary.summaryText.isBlank()) return
+
+    DetailCard(
+        title = "AI Summary",
+        icon = {
+            Icon(
+                imageVector = Icons.Default.AutoAwesome,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    ) {
+        Text(
+            text = summary.summaryText,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = buildString {
+                val model = summary.providerModel
+                if (model != null) append("summarised by $model · ") else append("summarised ")
+                append("on device")
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun RecognizedTextSection(memory: Memory) {
+    val ocrResults = memory.derived.ocrResults
+    if (ocrResults.isEmpty()) return
+
+    val withText = ocrResults.filter {
+        it.status == StageStatus.SUCCESS && it.extractedText.isNotBlank()
+    }
+    val allEmpty = ocrResults.all { it.status == StageStatus.EMPTY }
+    val allFailed = ocrResults.all { it.status == StageStatus.FAILED }
+
+    DetailCard(title = "Text in images") {
+        when {
+            withText.isNotEmpty() -> {
+                withText.forEach { result ->
+                    Text(
+                        text = result.extractedText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+            allEmpty -> StatusNote("No text found in these images.")
+            allFailed -> StatusNote("Could not read these images.")
+            else -> StatusNote("No text found.")
+        }
+    }
+}
+
+@Composable
+private fun ImageDescriptionSection(memory: Memory) {
+    val visionResults = memory.derived.visionResults
+    if (visionResults.isEmpty()) return
+
+    val described = visionResults.filter {
+        it.status == StageStatus.SUCCESS && it.description.isNotBlank()
+    }
+
+    DetailCard(title = "Source content") {
+        when {
+            described.isNotEmpty() -> {
+                described.forEach { result ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = result.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        result.providerModel?.let { model ->
+                            Text(
+                                text = "by $model",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            visionResults.all { it.status == StageStatus.NOT_SUPPORTED } ->
+                StatusNote("Vision unavailable with your current model.")
+            visionResults.all { it.status == StageStatus.FAILED } ->
+                StatusNote("Could not describe these images.")
+            else -> StatusNote("No description produced.")
+        }
+    }
+}
+
 @Composable
 private fun ExtractedMetadataSection(memory: Memory) {
     val urls = memory.derived.urls
     val dates = memory.derived.dates
     val entities = memory.derived.entities
+    val urlBlocks = memory.contentBlocks.filter { it.type == ContentType.URL }
 
-    if (urls.isEmpty() && dates.isEmpty() && entities.isEmpty()) return
+    if (urls.isEmpty() && dates.isEmpty() && entities.isEmpty() && urlBlocks.isEmpty()) return
 
-    if (urls.isNotEmpty()) {
-        // "Links", from `memory.html`. Each of the three metadata groups gets its own
-        // DetailSection shell rather than one shared panel, so a Memory with only links
-        // does not show empty headers for dates and mentions.
-        DetailSection(title = "Links") {
+    if (urls.isNotEmpty() || urlBlocks.isNotEmpty()) {
+        DetailCard(title = "Links") {
             val context = LocalContext.current
             urls.forEach { url ->
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier
                         .fillMaxWidth()
-                        // Links were rendered as inert text, which made the whole
-                        // URL-extraction stage terminate in something the user could look
-                        // at and not use.
                         .clickable { openUrl(context, url.rawUrl) }
                         .semantics { role = Role.Button }
                 ) {
@@ -223,22 +569,40 @@ private fun ExtractedMetadataSection(memory: Memory) {
                     }
                 }
             }
+            urlBlocks.forEach { block ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { openUrl(context, block.content) }
+                        .semantics { role = Role.Button }
+                ) {
+                    Text(
+                        text = block.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
         }
     }
 
     if (dates.isNotEmpty()) {
-        DetailSection(title = "Dates mentioned") {
+        DetailCard(title = "Dates mentioned") {
             dates.forEach { date ->
                 Text(
                     text = date.rawText,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
     }
 
     if (entities.isNotEmpty()) {
-        DetailSection(title = "Mentioned") {
+        DetailCard(title = "Mentioned") {
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -257,151 +621,6 @@ private fun ExtractedMetadataSection(memory: Memory) {
     }
 }
 
-/**
- * The shared shell for a detail section.
- *
- * One composable rather than the same `Surface` written three times, so the three sections
- * cannot drift apart — which they had already started to, at 12 dp, 16 dp and no corner
- * respectively.
- */
-@Composable
-private fun DetailSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            content = {
-                // The app-wide section eyebrow: uppercase, tracked, muted — the same
-                // recipe HeroHeader and Settings' SettingsSection use, and what
-                // `memory.html` `.detail-section h2` specifies.
-                Text(
-                    text = title.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    letterSpacing = Tracking.Eyebrow,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                content()
-            }
-        )
-    }
-}
-
-@Composable
-private fun SummarySection(memory: Memory) {
-    val summary = memory.derived.summary ?: return
-    // Keep the original blank-text guard as well as the status check: dropping it would
-    // render an empty styled panel, which is a behaviour change this restyle must not make.
-    if (summary.status != StageStatus.SUCCESS || summary.summaryText.isBlank()) return
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        // 2.5rem everywhere but the top-right, per `memory.html`. The one odd corner is
-        // the brand signature and is not a rounding of the others — the shared
-        // `CardShapeLarge` token so the silhouette cannot drift.
-        shape = CardShapeLarge,
-        color = MaterialTheme.colorScheme.primaryContainer
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = summary.summaryText,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            // Names the model and says where it ran. Quieter than the summary because it
-            // is provenance, not content — but present, because "on device" is a claim
-            // this app makes and should keep visible.
-            Text(
-                text = buildString {
-                    val model = summary.providerModel
-                    if (model != null) append("summarised by $model · ") else append("summarised ")
-                    append("on device")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun RecognizedTextSection(memory: Memory) {
-    val ocrResults = memory.derived.ocrResults
-    if (ocrResults.isEmpty()) return
-
-    val withText = ocrResults.filter {
-        it.status == StageStatus.SUCCESS && it.extractedText.isNotBlank()
-    }
-    val allEmpty = ocrResults.all { it.status == StageStatus.EMPTY }
-    val allFailed = ocrResults.all { it.status == StageStatus.FAILED }
-
-    // "Text in images", from `memory.html`.
-    DetailSection(title = "Text in images") {
-        when {
-            withText.isNotEmpty() -> {
-                withText.forEach { result ->
-                    Text(
-                        text = result.extractedText,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-            // Say which of the three it is. "No text found" and "could not read the
-            // image" are different facts and the user can act on the second one.
-            allEmpty -> StatusNote("No text found in these images.")
-            allFailed -> StatusNote("Could not read these images.")
-            else -> StatusNote("No text found.")
-        }
-    }
-}
-
-@Composable
-private fun ImageDescriptionSection(memory: Memory) {
-    val visionResults = memory.derived.visionResults
-    if (visionResults.isEmpty()) return
-
-    val described = visionResults.filter {
-        it.status == StageStatus.SUCCESS && it.description.isNotBlank()
-    }
-
-    // "Source content", from `memory.html` — where the prose under that heading is a
-    // description of the captured image, which is exactly what this section renders.
-    DetailSection(title = "Source content") {
-        when {
-            described.isNotEmpty() -> {
-                described.forEach { result ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = result.description,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        result.providerModel?.let { model ->
-                            Text(
-                                text = "by $model",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-            // These three are genuinely different facts. Only the first is something
-            // the user can act on, by choosing a vision-capable model.
-            visionResults.all { it.status == StageStatus.NOT_SUPPORTED } ->
-                StatusNote("Vision unavailable with your current model.")
-            visionResults.all { it.status == StageStatus.FAILED } ->
-                StatusNote("Could not describe these images.")
-            else -> StatusNote("No description produced.")
-        }
-    }
-}
-
 @Composable
 private fun StatusNote(message: String) {
     Text(
@@ -411,63 +630,47 @@ private fun StatusNote(message: String) {
     )
 }
 
-@Composable
-private fun ContentBlockView(block: ContentBlock) {
-    when (block.type) {
-        ContentType.TEXT -> {
-            Text(
-                text = block.content,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-        ContentType.IMAGE -> {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(File(block.content))
-                    .crossfade(true)
-                    .build(),
-                contentDescription = "Memory image",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.FillWidth
-            )
-        }
-        ContentType.URL -> {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = block.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(12.dp)
-                )
+/**
+ * Share memory text and summary using Android Intent.
+ */
+private fun shareMemory(context: Context, memory: Memory) {
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        val shareText = buildString {
+            val summary = memory.derived.summary?.summaryText
+            if (!summary.isNullOrBlank()) {
+                append(summary)
+                append("\n\n")
+            }
+            val textContent = memory.contentBlocks
+                .filter { it.type == ContentType.TEXT }
+                .joinToString("\n") { it.content }
+            if (textContent.isNotBlank()) {
+                append(textContent)
             }
         }
+        putExtra(Intent.EXTRA_TEXT, shareText.ifBlank { "Memory #${memory.id}" })
+    }
+    try {
+        context.startActivity(Intent.createChooser(shareIntent, "Share Memory"))
+    } catch (e: ActivityNotFoundException) {
+        // Silently do nothing if no app can handle share
     }
 }
-
 
 /**
  * Open a link in whatever the user has set as their browser.
- *
- * Silently does nothing when no app can handle it. That case is rare — a device with
- * no browser — and a crash or an error dialog would both be worse than a tap that
- * does not respond, since the URL is still visible and selectable on screen.
  */
-private fun openUrl(context: android.content.Context, url: String) {
+private fun openUrl(context: Context, url: String) {
     try {
         context.startActivity(
-            android.content.Intent(
-                android.content.Intent.ACTION_VIEW,
-                android.net.Uri.parse(url)
-            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(url)
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
-    } catch (e: android.content.ActivityNotFoundException) {
-        // No handler installed. Nothing useful to do or say.
+    } catch (e: ActivityNotFoundException) {
+        // No browser installed.
     }
 }
+

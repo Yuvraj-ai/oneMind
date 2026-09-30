@@ -1,10 +1,15 @@
 package com.onemind.app.ui.search
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -12,58 +17,71 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.onemind.app.ui.components.HeroHeader
+import com.onemind.app.ui.components.ExpressiveIconButton
 import com.onemind.app.ui.components.PhoneFrame
+import com.onemind.app.ui.components.pressScale
+import com.onemind.app.ui.components.rememberPressMorph
 import com.onemind.app.ui.theme.PillShape
 import com.onemind.app.ui.theme.Tracking
 
 /**
- * Examples of what to type, not filters, and verbatim from `search.html`.
- *
- * They are chosen rather than arbitrary: one is purely semantic, one names a source and a
- * time, one is relative time. Between them they demonstrate the claim the footnote then
- * makes — keyword, meaning and time all go in the one bar. Three vaguely semantic examples
- * would leave the user with no reason to believe the other two dimensions exist.
+ * Quick category suggestion chips displayed when the search query is blank.
  */
-private val SUGGESTIONS = listOf(
+private val QUICK_SUGGESTIONS = listOf(
+    "Screenshots",
+    "Recent Notes",
+    "Links",
+    "Extracted Events"
+)
+
+/**
+ * Natural language query examples demonstrating unified retrieval across keyword, meaning, and time.
+ */
+private val EXAMPLE_QUERIES = listOf(
     "that repo about embeddings someone sent me",
     "screenshots from last night",
     "the meeting I noted before midnight"
 )
 
 /**
- * Unified retrieval behind one bar.
+ * M3 Expressive Search Screen.
  *
- * No filter chips, and that is a locked product decision rather than an omission: context
- * belongs in the query text. The suggestion pills below the bar are examples of things to
- * type, and tapping one types it.
- *
- * Three states, kept distinct because each asks something different of the user — wait,
- * try different words, or carry on. Collapsing them would tell someone their search failed
- * while it was still running, and the empty-query case is not a failed search at all.
+ * Features:
+ * - Docked search bar surface with 28dp pill corners, surfaceContainerHigh background, and hairline outlineVariant border.
+ * - Leading back affordance using [ExpressiveIconButton].
+ * - Trailing clear button when query is not empty.
+ * - Active vector search indicator: [LinearProgressIndicator] below the search bar when [SearchUiState.isSearching] is true.
+ * - Interactive suggestion pills with 100dp pill corners (PillShape) and spring press scale.
+ * - Warm tonal empty result state card in surfaceContainer when 0 results match.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     onNavigateToMemory: (Long) -> Unit,
@@ -73,51 +91,86 @@ fun SearchScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     PhoneFrame {
-        HeroHeader(
-            eyebrow = "Unified retrieval",
-            title = "What are you looking for?",
-            // `leading`, not `trailing`: the reference puts the back button on its own row
-            // above the eyebrow. In `trailing` it would sit beside the title on the right,
-            // reading as an action rather than a way out.
-            leading = {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                }
-            }
-        )
-
-        TextField(
-            value = uiState.query,
-            onValueChange = viewModel::onQueryChanged,
+        // Docked M3 Expressive search surface
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .height(64.dp),
-            placeholder = { Text("Ask in your own words…") },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            trailingIcon = {
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Leading back affordance using ExpressiveIconButton
+                ExpressiveIconButton(
+                    onClick = onNavigateBack,
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (uiState.query.isEmpty()) {
+                        Text(
+                            text = "Ask in your own words…",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    BasicTextField(
+                        value = uiState.query,
+                        onValueChange = viewModel::onQueryChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+                    )
+                }
+
+                // Trailing clear button when query is not empty
                 if (uiState.query.isNotEmpty()) {
-                    IconButton(onClick = viewModel::clear) {
-                        Icon(Icons.Default.Close, "Clear search")
+                    ExpressiveIconButton(
+                        onClick = viewModel::clear,
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear search"
+                        )
                     }
                 }
-            },
-            singleLine = true,
-            shape = MaterialTheme.shapes.extraLarge,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent
+            }
+        }
+
+        // Active vector search indicator
+        if (uiState.isSearching) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
             )
-        )
+        }
 
         when {
             !uiState.isActive -> SuggestionsState(onSuggestion = viewModel::onQueryChanged)
@@ -125,32 +178,18 @@ fun SearchScreen(
             uiState.isSearching && uiState.results.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator() }
-
-            uiState.results.isEmpty() -> Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "No memories matched",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Try describing it differently",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                // Active vector search indicator runs above; content remains clean
             }
+
+            uiState.results.isEmpty() -> EmptyResultsState()
 
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 20.dp,
                     end = 20.dp,
-                    top = 20.dp,
+                    top = 16.dp,
                     bottom = 24.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -177,62 +216,80 @@ fun SearchScreen(
 }
 
 /**
- * What to type, before anything has been typed.
+ * Empty query suggestion state featuring quick category suggestion chips and natural language prompts.
  *
- * The heading carries the reference's `Sparkles` mark, and the footnote is its exact
- * wording: the point being made is that there is nothing to configure, so paraphrasing it
- * into "all from one bar" would drop the half that says *no filters to fiddle with*.
+ * Each pill is styled with surfaceContainerHigh, 100dp pill corners (PillShape), and spring press scale.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SuggestionsState(onSuggestion: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 20.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "Try asking",
-                style = MaterialTheme.typography.labelSmall,
-                letterSpacing = Tracking.Eyebrow,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        SUGGESTIONS.forEach { suggestion ->
-            Surface(
-                onClick = { onSuggestion(suggestion) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = PillShape,
-                color = MaterialTheme.colorScheme.surfaceContainer
+        // Quick suggestion chips
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Schedule,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = suggestion,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Quick suggestions",
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = Tracking.Eyebrow,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                QUICK_SUGGESTIONS.forEach { suggestion ->
+                    SuggestionPill(
+                        label = suggestion,
+                        onClick = { onSuggestion(suggestion) }
                     )
                 }
+            }
+        }
+
+        // Example queries
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Try asking",
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = Tracking.Eyebrow,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            EXAMPLE_QUERIES.forEach { suggestion ->
+                SuggestionPill(
+                    label = suggestion,
+                    icon = Icons.Default.Search,
+                    onClick = { onSuggestion(suggestion) },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
@@ -240,7 +297,108 @@ private fun SuggestionsState(onSuggestion: (String) -> Unit) {
             text = "Keyword, meaning and time are searched together — no filters to fiddle with.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 14.dp)
+            modifier = Modifier.padding(top = 4.dp)
         )
+    }
+}
+
+/**
+ * Interactive suggestion pill with 100dp pill corners, surfaceContainerHigh background,
+ * and spring press scale feedback.
+ */
+@Composable
+private fun SuggestionPill(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val morph = rememberPressMorph(interaction, restCorner = 100.dp, pressedCorner = 100.dp)
+
+    Surface(
+        onClick = onClick,
+        interactionSource = interaction,
+        modifier = modifier.pressScale(morph),
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+/**
+ * Warm tonal empty result state card in surfaceContainer when query returned 0 results.
+ */
+@Composable
+private fun EmptyResultsState(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 32.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = "No memories matched",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Text(
+                    text = "Try describing it differently or searching for different keywords",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }

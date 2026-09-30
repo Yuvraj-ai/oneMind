@@ -167,4 +167,19 @@ class DateGroupingTest {
         assertEquals("This Month", DateGroup.THIS_MONTH.label)
         assertEquals("Older", DateGroup.OLDER.label)
     }
+
+    @Test
+    fun `formatHeader formats relative and month headers correctly`() {
+        assertEquals("Today", DateGrouping.formatHeader(DateGroup.TODAY))
+        assertEquals("Yesterday", DateGrouping.formatHeader(DateGroup.YESTERDAY))
+        assertEquals("This Week", DateGrouping.formatHeader(DateGroup.THIS_WEEK))
+
+        val augMemory = memory(LocalDate.of(2026, 8, 10))
+        val monthHeader = DateGrouping.formatHeader(DateGroup.THIS_MONTH, listOf(augMemory), zone)
+        assertEquals("August 2026", monthHeader)
+
+        val julMemory = memory(LocalDate.of(2026, 7, 15))
+        val olderHeader = DateGrouping.formatHeader(DateGroup.OLDER, listOf(julMemory), zone)
+        assertEquals("July 2026", olderHeader)
+    }
 }

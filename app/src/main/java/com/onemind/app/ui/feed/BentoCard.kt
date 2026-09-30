@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -24,12 +25,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.onemind.app.domain.model.ContentType
 import com.onemind.app.domain.model.Memory
 import com.onemind.app.domain.model.ProcessingState
 import com.onemind.app.ui.components.CategoryChip
@@ -37,31 +44,28 @@ import com.onemind.app.ui.components.CookieThumb
 import com.onemind.app.ui.components.StateChip
 import com.onemind.app.ui.components.pressScale
 import com.onemind.app.ui.components.rememberPressMorph
-import com.onemind.app.ui.theme.CardShapeLarge
-import com.onemind.app.ui.theme.CardShapeMedium
-import com.onemind.app.ui.theme.CardShapeSmall
+import com.onemind.app.ui.theme.AsymmetricCardShape
 import com.onemind.app.ui.theme.EmberGradient
+import com.onemind.app.ui.theme.PillShape
+import java.io.File
 
 /** Category chips a card of each size has room for — `max 2 except lg = 5`, per §4. */
 private fun chipBudget(size: BentoSize) = if (size == BentoSize.LARGE) 5 else 2
 
 private fun restShape(size: BentoSize): Shape = when (size) {
-    BentoSize.LARGE -> CardShapeLarge
-    BentoSize.MEDIUM -> CardShapeMedium
-    BentoSize.SMALL -> CardShapeSmall
+    BentoSize.LARGE -> AsymmetricCardShape
+    BentoSize.MEDIUM -> RoundedCornerShape(16.dp)
+    BentoSize.SMALL -> RoundedCornerShape(12.dp)
 }
 
 /**
- * Container colour per size, which is how the three sizes read as three tiers.
- *
- * `styles.css` gives each its own: `.lg` is `primary-container` at 45%, `.md` is `--card`,
- * `.sm` is `--surface-2`. The plan used one colour for all three, which flattens exactly
- * the tonal stepping DESIGN-GUIDE §2 relies on in place of shadow.
+ * Container colour per size: surfaceContainerHigh for primary large card,
+ * surfaceContainer for medium and small cards.
  */
 @Composable
 private fun containerColor(size: BentoSize): Color = when (size) {
-    BentoSize.LARGE -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-    BentoSize.MEDIUM -> MaterialTheme.colorScheme.secondaryContainer
+    BentoSize.LARGE -> MaterialTheme.colorScheme.surfaceContainerHigh
+    BentoSize.MEDIUM -> MaterialTheme.colorScheme.surfaceContainer
     BentoSize.SMALL -> MaterialTheme.colorScheme.surfaceContainer
 }
 
@@ -98,11 +102,12 @@ fun BentoCard(
     val interaction = remember { MutableInteractionSource() }
     val morph = rememberPressMorph(
         interactionSource = interaction,
-        // Any of the three rest shapes is within a few dp of this, so the morph starts
-        // from where the eye already is.
-        restCorner = 32.dp
+        restCorner = when (size) {
+            BentoSize.LARGE -> 28.dp
+            BentoSize.MEDIUM -> 16.dp
+            BentoSize.SMALL -> 12.dp
+        }
     )
-    val pressed = morph.scale < 1f
 
     Surface(
         modifier = modifier
@@ -118,19 +123,62 @@ fun BentoCard(
                 onClickLabel = "Open memory",
                 onLongClickLabel = "Delete memory"
             ),
-        shape = if (pressed) RoundedCornerShape(morph.corner) else restShape(size),
+        shape = restShape(size),
         color = containerColor(size)
     ) {
         Column {
             if (size == BentoSize.LARGE) {
-                // A banner rather than a decoded thumbnail: the grid scrolls, and this
-                // stands in for an image without paying to read one off disk.
+                val imageBlock = memory.contentBlocks.firstOrNull { it.type == ContentType.IMAGE }
+                val imagePath = imageBlock?.thumbnailPath ?: imageBlock?.content
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .height(180.dp)
                         .background(EmberGradient)
-                )
+                ) {
+                    if (imagePath != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(File(imagePath))
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // Subtle gradient scrim over image backdrop
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.45f)
+                                    )
+                                )
+                            )
+                    )
+
+                    // Relative timestamp pill badge in surfaceContainerHighest
+                    Surface(
+                        shape = PillShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.9f),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = formatRelativeTimestamp(memory.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
 
             Column(
@@ -143,8 +191,11 @@ fun BentoCard(
                 ) {
                     Text(
                         text = MemoryDisplay.title(memory),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontSize = if (size == BentoSize.LARGE) 24.sp else 17.sp,
+                        style = if (size == BentoSize.LARGE) {
+                            MaterialTheme.typography.titleLarge
+                        } else {
+                            MaterialTheme.typography.titleMedium
+                        },
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -159,7 +210,11 @@ fun BentoCard(
                 }
 
                 CategoryRow(memory = memory, budget = chipBudget(size))
-                CardFooter(memory = memory, onRetryProcessing = onRetryProcessing)
+                CardFooter(
+                    memory = memory,
+                    showTimestamp = size != BentoSize.LARGE,
+                    onRetryProcessing = onRetryProcessing
+                )
             }
         }
     }
@@ -218,7 +273,11 @@ private fun CategoryRow(memory: Memory, budget: Int) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CardFooter(memory: Memory, onRetryProcessing: () -> Unit) {
+private fun CardFooter(
+    memory: Memory,
+    showTimestamp: Boolean = true,
+    onRetryProcessing: () -> Unit
+) {
     val source = resolveSource(memory)
 
     FlowRow(
@@ -228,24 +287,28 @@ private fun CardFooter(memory: Memory, onRetryProcessing: () -> Unit) {
     ) {
         if (source != null) {
             SourceRow(memory = memory, modifier = Modifier.align(Alignment.CenterVertically))
+            if (showTimestamp) {
+                Text(
+                    text = "·",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .clearAndSetSemantics { }
+                )
+            }
+        }
+
+        if (showTimestamp) {
             Text(
-                text = "·",
+                text = formatRelativeTimestamp(memory.createdAt),
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.CenterVertically)
-                    .clearAndSetSemantics { }
+                modifier = Modifier.align(Alignment.CenterVertically)
             )
         }
-
-        Text(
-            text = formatTimestamp(memory.createdAt),
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.CenterVertically)
-        )
 
         if (memory.derived.urls.isNotEmpty()) {
             Icon(

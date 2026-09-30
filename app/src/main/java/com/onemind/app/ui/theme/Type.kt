@@ -53,59 +53,97 @@ val Figtree = FontFamily(
     variable(R.font.figtree_variable, FontWeight.SemiBold)
 )
 
-private val Default = Typography()
-
 /**
- * The eight slots DESIGN-GUIDE §5.2 specifies, plus every remaining slot re-pointed at
- * one of the two families.
+ * M3 Expressive Typography Scale.
  *
- * The re-pointing is not busywork: a slot left at its default keeps Roboto, and a single
- * stray Roboto label in a screen otherwise set in Figtree is exactly the kind of thing
- * that reads as "unfinished" without anyone being able to say why.
+ * Configured with Outfit for Display, Headline, and Title tiers, and Figtree for Body
+ * and Label tiers to maintain clear typographic hierarchy and readability.
  */
 val OneMindTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = Outfit,
-        fontSize = 42.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.035).em
+        fontSize = 57.sp,
+        lineHeight = 64.sp,
+        letterSpacing = (-0.25).sp
     ),
     displayMedium = TextStyle(
         fontFamily = Outfit,
-        fontSize = 40.sp,
-        fontWeight = FontWeight.SemiBold,
-        lineHeight = 42.sp
+        fontSize = 45.sp,
+        lineHeight = 52.sp
     ),
-    displaySmall = Default.displaySmall.copy(fontFamily = Outfit),
-    headlineLarge = Default.headlineLarge.copy(fontFamily = Outfit),
-    headlineMedium = Default.headlineMedium.copy(fontFamily = Outfit),
-    headlineSmall = Default.headlineSmall.copy(fontFamily = Outfit),
-    titleLarge = TextStyle(
+    displaySmall = TextStyle(
+        fontFamily = Outfit,
+        fontSize = 36.sp,
+        lineHeight = 44.sp
+    ),
+    headlineLarge = TextStyle(
+        fontFamily = Outfit,
+        fontSize = 32.sp,
+        fontWeight = FontWeight.Bold,
+        lineHeight = 40.sp
+    ),
+    headlineMedium = TextStyle(
         fontFamily = Outfit,
         fontSize = 28.sp,
         fontWeight = FontWeight.SemiBold,
-        lineHeight = 31.sp
+        lineHeight = 36.sp
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = Outfit,
+        fontSize = 24.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = 32.sp
+    ),
+    titleLarge = TextStyle(
+        fontFamily = Outfit,
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 28.sp
     ),
     titleMedium = TextStyle(
         fontFamily = Outfit,
-        fontSize = 21.sp,
+        fontSize = 16.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.02).em
+        lineHeight = 24.sp
     ),
     titleSmall = TextStyle(
         fontFamily = Figtree,
-        fontSize = 17.sp,
-        fontWeight = FontWeight.SemiBold
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 20.sp
     ),
-    bodyLarge = TextStyle(fontFamily = Figtree, fontSize = 16.sp),
-    bodyMedium = TextStyle(fontFamily = Figtree, fontSize = 15.sp, lineHeight = 24.sp),
-    bodySmall = Default.bodySmall.copy(fontFamily = Figtree),
-    labelLarge = Default.labelLarge.copy(fontFamily = Figtree),
-    labelMedium = Default.labelMedium.copy(fontFamily = Figtree),
+    bodyLarge = TextStyle(
+        fontFamily = Figtree,
+        fontSize = 16.sp,
+        lineHeight = 24.sp
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = Figtree,
+        fontSize = 14.sp,
+        lineHeight = 20.sp
+    ),
+    bodySmall = TextStyle(
+        fontFamily = Figtree,
+        fontSize = 12.sp,
+        lineHeight = 16.sp
+    ),
+    labelLarge = TextStyle(
+        fontFamily = Figtree,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = 20.sp
+    ),
+    labelMedium = TextStyle(
+        fontFamily = Figtree,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 16.sp
+    ),
     labelSmall = TextStyle(
         fontFamily = Figtree,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 16.sp
     )
 )
 

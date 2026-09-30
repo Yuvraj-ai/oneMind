@@ -1,32 +1,87 @@
 package com.onemind.app.ui.theme
 
+import android.content.Context
+import android.provider.Settings
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+
+/**
+ * M3 Expressive Spatial Spring for layout changes, card expansions, and dialog entrances.
+ * dampingRatio = 0.75f, stiffness = 380f.
+ */
+val SpatialSpring: SpringSpec<Float> = spring(
+    dampingRatio = 0.75f,
+    stiffness = 380f
+)
+
+/**
+ * M3 Expressive Effects Spring for press scale feedback and icon morphs.
+ * dampingRatio = 0.85f, stiffness = 1500f.
+ */
+val EffectsSpring: SpringSpec<Float> = spring(
+    dampingRatio = 0.85f,
+    stiffness = 1500f
+)
+
+/**
+ * Generic Spatial SpringSpec for any animated type (Float, Dp, Offset, etc.).
+ */
+fun <T> spatialSpring(
+    dampingRatio: Float = 0.75f,
+    stiffness: Float = 380f
+): SpringSpec<T> = spring(dampingRatio = dampingRatio, stiffness = stiffness)
+
+/**
+ * Generic Effects SpringSpec for any animated type (Float, Dp, Color, etc.).
+ */
+fun <T> effectsSpring(
+    dampingRatio: Float = 0.85f,
+    stiffness: Float = 1500f
+): SpringSpec<T> = spring(dampingRatio = dampingRatio, stiffness = stiffness)
+
+/**
+ * Checks whether reduced motion is enabled at the system level via [Settings.Global.ANIMATOR_DURATION_SCALE].
+ * When animator duration scale is 0, animations should transition instantly or use snap().
+ */
+fun isReducedMotionEnabled(context: Context): Boolean {
+    return try {
+        Settings.Global.getFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            1.0f
+        ) == 0f
+    } catch (_: Throwable) {
+        false
+    }
+}
+
+/**
+ * Composable check for whether reduced motion is enabled on the current device.
+ */
+@Composable
+fun isReducedMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember(context) { isReducedMotionEnabled(context) }
+}
+
+/**
+ * Composable helper remembering whether reduced motion is enabled on the current device.
+ */
+@Composable
+fun rememberReducedMotion(): Boolean {
+    val context = LocalContext.current
+    return remember(context) { isReducedMotionEnabled(context) }
+}
 
 /*
- * The expressive motion scheme's springs, as public constants.
- *
- * This file exists because `MaterialTheme.motionScheme` does not — not to us. In
- * material3 1.4.0 the whole expressive motion surface is Kotlin `internal`:
- * `MotionScheme`, `MotionScheme.standard()`, `.expressive()`,
- * `MaterialTheme.motionScheme`, and even the `ExperimentalMaterial3ExpressiveApi`
- * marker that would opt in to them. See `OneMindTheme`'s KDoc for the longer note,
- * including why `javap` said otherwise.
- *
- * The plan's instruction was that custom animations read their springs from
- * `MaterialTheme.motionScheme` so that a hand-written morph and a Material component
- * pressed beside it move with the same physics rather than two hand-tuned
- * approximations of it. That intent survives; only the mechanism changes. The numbers
- * below are not invented and not eyeballed from the spec — they were read out of the
- * resolved AAR's `androidx.compose.material3.tokens.ExpressiveMotionTokens`, which is
- * the same class `MotionScheme.ExpressiveMotionSchemeImpl` builds its own specs from.
- * So these *are* Material's expressive springs, reached the long way round.
- *
- * If material3 ever makes the motion scheme public, delete this file and switch the
- * call sites back. Until then, every custom animation in the app reads from here, and
- * none writes a spring inline — one place is the whole point.
+ * Legacy motion helper object retained for existing call sites.
  */
 object OneMindMotion {
+    val SpatialSpring: SpringSpec<Float> = com.onemind.app.ui.theme.SpatialSpring
+    val EffectsSpring: SpringSpec<Float> = com.onemind.app.ui.theme.EffectsSpring
 
     // Spatial: anything that moves or changes size. Underdamped on purpose — the
     // slight overshoot is what reads as "expressive" rather than merely animated.

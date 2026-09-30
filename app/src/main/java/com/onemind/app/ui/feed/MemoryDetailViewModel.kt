@@ -24,4 +24,10 @@ class MemoryDetailViewModel @Inject constructor(
             _memory.value = memoryRepository.getMemoryById(memoryId)
         }
     }
+
+    fun deleteMemory(memoryId: Long) {
+        viewModelScope.launch {
+            memoryRepository.deleteMemory(memoryId)
+        }
+    }
 }

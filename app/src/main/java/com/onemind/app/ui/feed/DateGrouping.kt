@@ -49,6 +49,31 @@ object DateGrouping {
             .map { group -> group to grouped.getValue(group) }
     }
 
+    /**
+     * Formats an expressive header label for a group, showing relative anchors ("Today",
+     * "Yesterday", "This Week") or calendar month anchors (e.g. "August 2026") matching spec §4.2.
+     */
+    fun formatHeader(
+        group: DateGroup,
+        memories: List<Memory> = emptyList(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): String {
+        val first = memories.firstOrNull()
+        return when (group) {
+            DateGroup.TODAY -> DateGroup.TODAY.label
+            DateGroup.YESTERDAY -> DateGroup.YESTERDAY.label
+            DateGroup.THIS_WEEK -> DateGroup.THIS_WEEK.label
+            DateGroup.THIS_MONTH, DateGroup.OLDER -> {
+                if (first != null) {
+                    val zdt = first.createdAt.atZone(zone)
+                    java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.getDefault()).format(zdt)
+                } else {
+                    group.label
+                }
+            }
+        }
+    }
+
     private fun classify(
         date: LocalDate,
         today: LocalDate,

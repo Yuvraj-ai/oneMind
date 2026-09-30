@@ -7,16 +7,41 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 
 /*
- * `--radius: 1.5rem` (24 dp) and its derivations, plus the asymmetric card corners that
- * are the brand's signature.
+ * M3 Expressive Shapes & Corner Scales.
+ *
+ * Semantic corner radii:
+ * - extraSmall: 4dp (Status dots, indicators)
+ * - small: 8dp (Tags, subtle chips)
+ * - medium: 16dp (Standard memory cards, text input fields)
+ * - large: 24dp (Prominent containers, hero media frames)
+ * - extraLarge: 28dp (Dialogs, bottom sheets, search pill)
+ * - full: 100dp (Floating toolbar, FAB, pill chips)
  */
 
+val ShapeExtraSmall = RoundedCornerShape(4.dp)
+val ShapeSmall = RoundedCornerShape(8.dp)
+val ShapeMedium = RoundedCornerShape(16.dp)
+val ShapeLarge = RoundedCornerShape(24.dp)
+val ShapeExtraLarge = RoundedCornerShape(28.dp)
+val ShapeFull = RoundedCornerShape(100.dp)
+
 val OneMindShapes = Shapes(
-    extraLarge = RoundedCornerShape(32.dp),
-    large = RoundedCornerShape(24.dp),
-    medium = RoundedCornerShape(16.dp),
-    small = RoundedCornerShape(12.dp),
-    extraSmall = RoundedCornerShape(8.dp)
+    extraSmall = ShapeExtraSmall,
+    small = ShapeSmall,
+    medium = ShapeMedium,
+    large = ShapeLarge,
+    extraLarge = ShapeExtraLarge
+)
+
+/**
+ * M3 Expressive Asymmetric Card Shape for top-emphasis visual memories.
+ * RoundedCornerShape(topStart = 28.dp, topEnd = 16.dp, bottomEnd = 28.dp, bottomStart = 16.dp)
+ */
+val AsymmetricCardShape = RoundedCornerShape(
+    topStart = 28.dp,
+    topEnd = 16.dp,
+    bottomEnd = 28.dp,
+    bottomStart = 16.dp
 )
 
 /*

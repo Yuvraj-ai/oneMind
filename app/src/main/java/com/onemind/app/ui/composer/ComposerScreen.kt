@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,19 +27,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.onemind.app.ui.theme.PillShape
-import com.onemind.app.ui.theme.Tracking
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.onemind.app.ui.components.ExpressiveIconButton
+import com.onemind.app.ui.components.ExpressiveTopBar
+import com.onemind.app.ui.components.PhoneFrame
+import com.onemind.app.ui.theme.PillShape
+import com.onemind.app.ui.theme.Tracking
 import java.io.File
 
+/**
+ * M3 Expressive Composer Screen matching spec §4.5.
+ *
+ * Features:
+ * - ExpressiveTopBar with Back navigation and dedicated Save filled button with pill status indicator.
+ * - Clean, distraction-free note canvas with bodyLarge (16sp, line height 24sp) typography.
+ * - Floating accessory pill docked above soft keyboard with 100dp pill corners and surfaceContainerHigh background.
+ * - Preserves BackHandler and auto-save on leave commit behavior so no notes are lost.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposerScreen(
@@ -75,39 +86,38 @@ fun ComposerScreen(
     // people leave a screen, so this was the likeliest way to lose content.
     BackHandler(onBack = handleBack)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    // Present in both states rather than fading in and out. The reference
-                    // shows "Draft" from the start and switches it to "Draft saved"; a
-                    // pill that appears from nowhere reads as an alert, when what it is
-                    // reporting is that nothing has gone wrong.
+    PhoneFrame {
+        ExpressiveTopBar(
+            leading = {
+                ExpressiveIconButton(onClick = handleBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+            },
+            trailing = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     val saved = uiState.showSavedIndicator
-                    Surface(
-                        shape = PillShape,
-                        color = if (saved) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainer
-                        }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    if (saved) {
+                        Surface(
+                            shape = PillShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
                         ) {
-                            Text(
-                                text = if (saved) "Draft saved" else "Draft",
-                                style = MaterialTheme.typography.labelSmall,
-                                letterSpacing = Tracking.Chip,
-                                color = if (saved) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                            if (saved) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Saved",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    letterSpacing = Tracking.Chip,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = null,
@@ -117,92 +127,103 @@ fun ComposerScreen(
                             }
                         }
                     }
-                },
-                navigationIcon = {
-                    IconButton(onClick = handleBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+
+                    Button(
+                        onClick = handleBack,
+                        shape = PillShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                        modifier = Modifier.height(38.dp)
+                    ) {
+                        Text(
+                            text = "Save",
+                            style = MaterialTheme.typography.labelLarge
                         )
                     }
                 }
-            )
-        },
-        bottomBar = {
-            ComposerBottomBar(
-                onAttachImage = {
-                    photoPickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                },
-                onPasteClipboard = {
-                    val clip = clipboardManager.getText()
-                    clip?.toString()?.let { text ->
-                        if (text.isNotBlank()) {
-                            viewModel.onClipboardPaste(text)
-                        }
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
             }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp)
-            ) {
-                // Attached images
-                if (uiState.imagePaths.isNotEmpty()) {
-                    ImageAttachmentRow(
-                        images = uiState.imagePaths,
-                        onRemove = { index -> viewModel.onImageRemoved(index) }
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            if (uiState.isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    // Attached images preview
+                    if (uiState.imagePaths.isNotEmpty()) {
+                        ImageAttachmentRow(
+                            images = uiState.imagePaths,
+                            onRemove = { index -> viewModel.onImageRemoved(index) }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Distraction-free full-bleed note editor with bodyLarge typography (16sp, line height 24sp)
+                    TextField(
+                        value = uiState.text,
+                        onValueChange = { viewModel.onTextChanged(it) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        placeholder = {
+                            Text(
+                                text = "What do you want to remember?",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                            )
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Bottom clearance space for the floating accessory pill
+                    Spacer(modifier = Modifier.height(76.dp))
                 }
 
-                // 52 vh, per `capture.html`: tall enough that the field is obviously the
-                // point of the screen, short enough that the toolbar stays visible.
-                val composerHeight = LocalConfiguration.current.screenHeightDp.dp * 0.52f
-
-                TextField(
-                    value = uiState.text,
-                    onValueChange = { viewModel.onTextChanged(it) },
+                // Floating accessory pill docked above the soft keyboard
+                ComposerAccessoryPill(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(composerHeight),
-                    placeholder = {
-                        Text(
-                            text = "What do you want to remember?",
-                            style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        .align(Alignment.BottomCenter)
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .padding(bottom = 16.dp),
+                    onAttachImage = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
                     },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent
-                    ),
-                    // Outfit at 32 sp: the reference sets the composer in the display face,
-                    // which is what makes typing feel like writing rather than filling in
-                    // a form.
-                    textStyle = MaterialTheme.typography.displayMedium.copy(
-                        fontSize = 32.sp,
-                        lineHeight = 44.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    onPasteClipboard = {
+                        val clip = clipboardManager.getText()
+                        clip?.toString()?.let { text ->
+                            if (text.isNotBlank()) {
+                                viewModel.onClipboardPaste(text)
+                            }
+                        }
+                    },
+                    onAddTag = {
+                        val currentText = uiState.text
+                        val prefix = if (currentText.isEmpty() || currentText.endsWith(" ") || currentText.endsWith("\n")) "" else " "
+                        viewModel.onTextChanged("$currentText$prefix#")
+                    }
                 )
             }
         }
@@ -210,77 +231,94 @@ fun ComposerScreen(
 }
 
 /**
- * The pinned toolbar: attach, paste, and a note about where the work happens.
+ * Floating accessory pill docked above the soft keyboard matching M3 Expressive spec §4.5.
  *
- * A 1 dp top border rather than tonal elevation, which is what the reference uses and what
- * keeps the toolbar readable against a `surfaceContainerLow` fill on a dark background —
- * elevation alone is nearly invisible at these tonal steps.
- *
- * The attach button is 56 dp, not 48. It is the only control here that opens something, and
- * §5.5 names that size specifically.
+ * Features:
+ * - 100dp pill corners (`PillShape`), `surfaceContainerHigh` background, subtle elevation and border.
+ * - Docked above keyboard using `imePadding` and `navigationBarsPadding`.
+ * - Image attachment button, paste shortcut, and tags action.
  */
 @Composable
-private fun ComposerBottomBar(
+private fun ComposerAccessoryPill(
     onAttachImage: () -> Unit,
-    onPasteClipboard: () -> Unit
+    onPasteClipboard: () -> Unit,
+    onAddTag: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Surface(
+        modifier = modifier,
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Image attachment action (40dp pill button with 48dp touch target)
+            ExpressiveIconButton(
+                onClick = onAttachImage,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.primary
             ) {
-                Surface(
-                    onClick = onAttachImage,
-                    modifier = Modifier.size(56.dp),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.tertiary
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = "Attach image",
-                            tint = MaterialTheme.colorScheme.onTertiary
-                        )
-                    }
-                }
-
-                Surface(
-                    onClick = onPasteClipboard,
-                    modifier = Modifier.height(48.dp),
-                    shape = PillShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Paste",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Auto-saves · processed on-device",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f)
+                Icon(
+                    imageVector = Icons.Default.Image,
+                    contentDescription = "Attach image"
                 )
+            }
+
+            // Paste shortcut pill
+            Surface(
+                onClick = onPasteClipboard,
+                modifier = Modifier.height(40.dp),
+                shape = PillShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentPaste,
+                        contentDescription = "Paste",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Paste",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            // Tag shortcut pill
+            Surface(
+                onClick = onAddTag,
+                modifier = Modifier.height(40.dp),
+                shape = PillShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocalOffer,
+                        contentDescription = "Add tag",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Tag",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }
@@ -311,7 +349,7 @@ private fun ImageAttachmentRow(
                     contentDescription = "Attached image",
                     modifier = Modifier
                         .size(80.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
 
@@ -320,6 +358,7 @@ private fun ImageAttachmentRow(
                     onClick = { onRemove(index) },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
+                        .padding(4.dp)
                         .size(24.dp)
                         .background(
                             MaterialTheme.colorScheme.errorContainer,

@@ -62,7 +62,9 @@ fun OneMindNavHost(
                 onNavigateToMemory = { memoryId ->
                     navController.navigate(NavRoutes.memoryDetail(memoryId))
                 },
-                onNavigateToSection = navController::navigateToSection
+                onNavigateToSection = navController::navigateToSection,
+                onNavigateToComposer = { navController.navigate(NavRoutes.COMPOSER) },
+                onNavigateToSearch = { navController.navigate(NavRoutes.SEARCH) }
             )
         }
 

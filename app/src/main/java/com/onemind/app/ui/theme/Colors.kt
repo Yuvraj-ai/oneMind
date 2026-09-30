@@ -16,85 +16,129 @@ import androidx.compose.ui.graphics.Color
  * Never hardcode a colour in a Composable. Alias it here.
  */
 
-val OneMindBackground = Color(0xFF140A08) // oklch(0.16 0.018 35)
-val OneMindSurface1 = Color(0xFF1F1310)   // oklch(0.2 0.021 33)
-val OneMindSurface2 = Color(0xFF2A1B18)   // oklch(0.24 0.024 33)
-val OneMindSurface3 = Color(0xFF352421)   // oklch(0.28 0.027 32)
-val OneMindSurface4 = Color(0xFF44302B)   // oklch(0.33 0.031 32)
-val OneMindCard = Color(0xFF271916)       // oklch(0.23 0.024 33)
-val OneMindForeground = Color(0xFFF8EBE7) // oklch(0.95 0.015 40)
+// --- Expressive Ember Tokens (Dark) ---
+val EmberDarkSurface = Color(0xFF121316)
+val EmberDarkSurfaceContainerLowest = Color(0xFF0D0E11)
+val EmberDarkSurfaceContainerLow = Color(0xFF18191E)
+val EmberDarkSurfaceContainer = Color(0xFF202228)
+val EmberDarkSurfaceContainerHigh = Color(0xFF2A2C34)
+val EmberDarkSurfaceContainerHighest = Color(0xFF353742)
 
-val OneMindPrimary = Color(0xFFEF8D67)           // oklch(0.74 0.13 42)
-val OneMindOnPrimary = Color(0xFF290C06)         // oklch(0.2 0.05 35)
-val OneMindPrimaryContainer = Color(0xFF593124)  // oklch(0.36 0.062 38)
-val OneMindOnPrimaryContainer = Color(0xFFFFE1D1) // oklch(0.93 0.04 50)
+val EmberDarkPrimary = Color(0xFFFF7A45)
+val EmberDarkOnPrimary = Color(0xFF481500)
+val EmberDarkPrimaryContainer = Color(0xFF5C2008)
+val EmberDarkOnPrimaryContainer = Color(0xFFFFDBCF)
 
-val OneMindAccent = Color(0xFFF7CBC7)   // oklch(0.88 0.05 25)
-val OneMindOnAccent = Color(0xFF2A130F) // oklch(0.22 0.04 32)
+val EmberDarkSecondary = Color(0xFFE7BDB0)
+val EmberDarkOnSecondary = Color(0xFF442A22)
+val EmberDarkSecondaryContainer = Color(0xFF3E2723)
+val EmberDarkOnSecondaryContainer = Color(0xFFF5D6CB)
 
-val OneMindMutedForeground = Color(0xFFBCA9A3) // oklch(0.75 0.024 40)
-val OneMindBorder = Color(0xFF433431)          // oklch(0.34 0.022 33)
-val OneMindOutline = Color(0xFF62514C)         // oklch(0.45 0.025 34)
-val OneMindInput = Color(0xFF392A26)           // oklch(0.3 0.024 33)
+val EmberDarkTertiary = Color(0xFFF5A623)
+val EmberDarkOnTertiary = Color(0xFF442B00)
+val EmberDarkTertiaryContainer = Color(0xFF3D2E14)
+val EmberDarkOnTertiaryContainer = Color(0xFFFFE099)
 
-val OneMindDestructive = Color(0xFFED5350)   // oklch(0.65 0.19 25)
-val OneMindOnDestructive = Color(0xFFFFF6F3) // oklch(0.98 0.01 40)
+val EmberDarkOutline = Color(0xFF8C8E99)
+val EmberDarkOutlineVariant = Color(0xFF44464F)
+
+// --- Expressive Ember Tokens (Light) ---
+val EmberLightSurface = Color(0xFFFAF9F6)
+val EmberLightSurfaceContainerLowest = Color(0xFFFFFFFF)
+val EmberLightSurfaceContainerLow = Color(0xFFF6F3ED)
+val EmberLightSurfaceContainer = Color(0xFFF0ECE5)
+val EmberLightSurfaceContainerHigh = Color(0xFFE6E1D9)
+val EmberLightSurfaceContainerHighest = Color(0xFFDDD8D0)
+
+val EmberLightPrimary = Color(0xFFA33E15)
+val EmberLightOnPrimary = Color(0xFFFFFFFF)
+val EmberLightPrimaryContainer = Color(0xFFFFDBCF)
+val EmberLightOnPrimaryContainer = Color(0xFF3B0900)
+
+val EmberLightSecondary = Color(0xFF77574E)
+val EmberLightOnSecondary = Color(0xFFFFFFFF)
+val EmberLightSecondaryContainer = Color(0xFFFFDBCF)
+val EmberLightOnSecondaryContainer = Color(0xFF2C150F)
+
+val EmberLightTertiary = Color(0xFF805600)
+val EmberLightOnTertiary = Color(0xFFFFFFFF)
+val EmberLightTertiaryContainer = Color(0xFFFFE099)
+val EmberLightOnTertiaryContainer = Color(0xFF271900)
+
+val EmberLightOutline = Color(0xFF85736E)
+val EmberLightOutlineVariant = Color(0xFFD8C2BB)
+
+// Compatibility aliases for legacy calls
+val OneMindBackground = EmberDarkSurface
+val OneMindSurface1 = EmberDarkSurfaceContainerLow
+val OneMindSurface2 = EmberDarkSurfaceContainer
+val OneMindSurface3 = EmberDarkSurfaceContainerHigh
+val OneMindSurface4 = EmberDarkSurfaceContainerHighest
+val OneMindCard = EmberDarkSurfaceContainer
+val OneMindForeground = Color(0xFFF8EBE7)
+
+val OneMindPrimary = EmberDarkPrimary
+val OneMindOnPrimary = EmberDarkOnPrimary
+val OneMindPrimaryContainer = EmberDarkPrimaryContainer
+val OneMindOnPrimaryContainer = EmberDarkOnPrimaryContainer
+
+val OneMindAccent = EmberDarkTertiary
+val OneMindOnAccent = EmberDarkOnTertiary
+
+val OneMindMutedForeground = Color(0xFFBCA9A3)
+val OneMindBorder = EmberDarkOutlineVariant
+val OneMindOutline = EmberDarkOutline
+val OneMindInput = EmberDarkSurfaceContainerLow
+
+val OneMindDestructive = Color(0xFFED5350)
+val OneMindOnDestructive = Color(0xFFFFF6F3)
 
 /**
  * Semantic colours with no `ColorScheme` slot.
- *
- * M3 has `error` and nothing for "went well" or "be careful", so these are exposed as
- * plain tokens and used directly. Kept here rather than invented at a call site.
  */
-val OneMindSuccess = Color(0xFF57BC80) // oklch(0.72 0.13 155)
-val OneMindWarning = Color(0xFFE9B452) // oklch(0.8 0.13 80)
+val OneMindSuccess = Color(0xFF57BC80)
+val OneMindWarning = Color(0xFFE9B452)
 
 /** `--gradient-ember` stops, at 0% / 55% / 100%. */
-val OneMindEmber0 = Color(0xFF833F29)   // oklch(0.45 0.1 38)
-val OneMindEmber55 = Color(0xFF442321)  // oklch(0.3 0.05 25)
-val OneMindEmber100 = Color(0xFF2C1A16) // oklch(0.24 0.03 33)
+val OneMindEmber0 = Color(0xFF833F29)
+val OneMindEmber55 = Color(0xFF442321)
+val OneMindEmber100 = Color(0xFF2C1A16)
 
 /** `--gradient-halo` inner stop, before its 0.85 alpha is applied. */
-val OneMindHalo = Color(0xFF5C2F1F) // oklch(0.36 0.07 40)
+val OneMindHalo = Color(0xFF5C2F1F)
 
 /**
- * The canonical expressive scheme, mapped per DESIGN-GUIDE §5.1.
+ * M3 Expressive Ember Dark ColorScheme.
  *
- * The tonal stepping is the point: cards and chips are distinguished by surface level,
- * not by shadow, so `surfaceContainer*` carries real design weight here rather than
- * being a set of near-identical greys.
+ * Rich tonal depth across container levels: cards and segmented buttons are structured
+ * through surfaceContainerLowest to surfaceContainerHighest.
  */
 val EmberDarkColorScheme = darkColorScheme(
-    primary = OneMindPrimary,
-    onPrimary = OneMindOnPrimary,
-    primaryContainer = OneMindPrimaryContainer,
-    onPrimaryContainer = OneMindOnPrimaryContainer,
-
-    // `--card`. Cards and the chips that sit on them read as one tonal family.
-    secondaryContainer = OneMindCard,
-    onSecondaryContainer = OneMindForeground,
-
-    // The expressive pop: FAB, attach button, "Add to calendar".
-    tertiary = OneMindAccent,
-    onTertiary = OneMindOnAccent,
-    tertiaryContainer = OneMindAccent,
-    onTertiaryContainer = OneMindOnAccent,
-
-    background = OneMindBackground,
+    primary = EmberDarkPrimary,
+    onPrimary = EmberDarkOnPrimary,
+    primaryContainer = EmberDarkPrimaryContainer,
+    onPrimaryContainer = EmberDarkOnPrimaryContainer,
+    secondary = EmberDarkSecondary,
+    onSecondary = EmberDarkOnSecondary,
+    secondaryContainer = EmberDarkSecondaryContainer,
+    onSecondaryContainer = EmberDarkOnSecondaryContainer,
+    tertiary = EmberDarkTertiary,
+    onTertiary = EmberDarkOnTertiary,
+    tertiaryContainer = EmberDarkTertiaryContainer,
+    onTertiaryContainer = EmberDarkOnTertiaryContainer,
+    background = EmberDarkSurface,
     onBackground = OneMindForeground,
-    surface = OneMindBackground,
+    surface = EmberDarkSurface,
     onSurface = OneMindForeground,
-    surfaceVariant = OneMindSurface2,
+    surfaceVariant = EmberDarkSurfaceContainerHigh,
     onSurfaceVariant = OneMindMutedForeground,
-    surfaceContainerLowest = OneMindBackground,
-    surfaceContainerLow = OneMindSurface1,
-    surfaceContainer = OneMindSurface2,
-    surfaceContainerHigh = OneMindSurface3,
-    surfaceContainerHighest = OneMindSurface4,
-
-    outline = OneMindOutline,
-    outlineVariant = OneMindBorder,
-
+    surfaceContainerLowest = EmberDarkSurfaceContainerLowest,
+    surfaceContainerLow = EmberDarkSurfaceContainerLow,
+    surfaceContainer = EmberDarkSurfaceContainer,
+    surfaceContainerHigh = EmberDarkSurfaceContainerHigh,
+    surfaceContainerHighest = EmberDarkSurfaceContainerHighest,
+    outline = EmberDarkOutline,
+    outlineVariant = EmberDarkOutlineVariant,
     error = OneMindDestructive,
     onError = OneMindOnDestructive,
     errorContainer = OneMindDestructive,
@@ -102,34 +146,36 @@ val EmberDarkColorScheme = darkColorScheme(
 )
 
 /**
- * Light, provided so the `darkTheme` parameter is honest rather than decorative.
- *
- * Derived, not designed. The reference is dark-only, so these values are the ember hues
- * re-anchored to a light background; they are not a second designed palette and should
- * not be treated as one.
+ * M3 Expressive Ember Light ColorScheme.
  */
 val EmberLightColorScheme = lightColorScheme(
-    primary = Color(0xFF8F4021),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFFFDBCC),
-    onPrimaryContainer = Color(0xFF351000),
-    secondaryContainer = Color(0xFFFFEDE5),
-    onSecondaryContainer = Color(0xFF2B1710),
-    tertiary = Color(0xFF7D4F49),
-    onTertiary = Color(0xFFFFFFFF),
-    background = Color(0xFFFFF8F5),
-    onBackground = Color(0xFF231916),
-    surface = Color(0xFFFFF8F5),
-    onSurface = Color(0xFF231916),
-    surfaceVariant = Color(0xFFF5DED4),
-    onSurfaceVariant = Color(0xFF53433D),
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFFFF1EB),
-    surfaceContainer = Color(0xFFFFEBE2),
-    surfaceContainerHigh = Color(0xFFFAE5DC),
-    surfaceContainerHighest = Color(0xFFF4DFD6),
-    outline = Color(0xFF85736C),
-    outlineVariant = Color(0xFFD8C2B9),
-    error = Color(0xFFB3261E),
-    onError = Color(0xFFFFFFFF)
+    primary = EmberLightPrimary,
+    onPrimary = EmberLightOnPrimary,
+    primaryContainer = EmberLightPrimaryContainer,
+    onPrimaryContainer = EmberLightOnPrimaryContainer,
+    secondary = EmberLightSecondary,
+    onSecondary = EmberLightOnSecondary,
+    secondaryContainer = EmberLightSecondaryContainer,
+    onSecondaryContainer = EmberLightOnSecondaryContainer,
+    tertiary = EmberLightTertiary,
+    onTertiary = EmberLightOnTertiary,
+    tertiaryContainer = EmberLightTertiaryContainer,
+    onTertiaryContainer = EmberLightOnTertiaryContainer,
+    background = EmberLightSurface,
+    onBackground = Color(0xFF1D1B1A),
+    surface = EmberLightSurface,
+    onSurface = Color(0xFF1D1B1A),
+    surfaceVariant = Color(0xFFF5DED7),
+    onSurfaceVariant = Color(0xFF53433F),
+    surfaceContainerLowest = EmberLightSurfaceContainerLowest,
+    surfaceContainerLow = EmberLightSurfaceContainerLow,
+    surfaceContainer = EmberLightSurfaceContainer,
+    surfaceContainerHigh = EmberLightSurfaceContainerHigh,
+    surfaceContainerHighest = EmberLightSurfaceContainerHighest,
+    outline = EmberLightOutline,
+    outlineVariant = EmberLightOutlineVariant,
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002)
 )

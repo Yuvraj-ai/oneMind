@@ -1,16 +1,17 @@
 package com.onemind.app.ui.onboarding
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.*
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,9 +41,6 @@ fun ModelSelectionScreen(
     }
 
     PhoneFrame {
-        // No `leading` back arrow: this screen's signature carries no back callback and it
-        // is reached straight from the welcome step, so there is nothing to navigate back
-        // to without adding state the constraints forbid. Recorded as a deviation.
         HeroHeader(
             eyebrow = "Runs on this device",
             title = "Pick a mind"
@@ -67,12 +65,12 @@ fun ModelSelectionScreen(
                 item {
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = "You're on mobile data. Consider using WiFi for the download.",
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(14.dp),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -90,8 +88,7 @@ fun ModelSelectionScreen(
             }
         }
 
-        // Sticky CTA: a 56 dp-tall pill in `primary`, pinned below the scrolling list with
-        // the navigation-bar inset, per `onboarding.html`.
+        // Sticky CTA: high-contrast filled pill button
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -120,7 +117,9 @@ fun ModelSelectionScreen(
 
             TextButton(
                 onClick = onChooseCloud,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
             ) {
                 Text("Use a cloud provider instead")
             }
@@ -130,78 +129,161 @@ fun ModelSelectionScreen(
 
 @Composable
 private fun NoLocalModelsScreen(onChooseCloud: () -> Unit, onSkip: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "Set up AI enrichment",
-            style = MaterialTheme.typography.headlineMedium
+    PhoneFrame {
+        HeroHeader(
+            eyebrow = "oneMind",
+            title = "Set up AI enrichment"
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Honest about what works and what does not, rather than offering a
-        // download that cannot run. See ADR-0002.
-        Text(
-            text = "oneMind reads text out of your screenshots on-device, with no " +
-                "account and nothing leaving your phone. That part always works.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "Summaries, categories and image descriptions need a language " +
-                "model. On-device models aren't ready yet on Android, so for now " +
-                "these come from an AI provider you choose and configure yourself.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "You can skip this and add it later. Saving and searching your " +
-                "memories works either way.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Button(
-            onClick = onChooseCloud,
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Configure a provider")
+            // Hero illustration badge
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.size(64.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(44.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.DocumentScanner,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "On-Device OCR",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "oneMind reads text out of screenshots locally with no accounts.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(44.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudQueue,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "AI Provider",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Summaries, categories, and vision can be powered by your own cloud API.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "You can skip this and configure it later in Settings. Saving and searching your memories works either way.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TextButton(
-            onClick = onSkip,
-            modifier = Modifier.fillMaxWidth()
+        // Sticky CTA matching the rest of the onboarding screens
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Skip for now")
+            Button(
+                onClick = onChooseCloud,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = PillShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                Text(
+                    text = "Configure a provider",
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+            ) {
+                Text("Skip for now")
+            }
         }
     }
 }
 
 /**
- * One model, as a selectable pill row.
- *
- * The size badge on the left is the reference's idea and a good one: parameter count is the
- * single number that decides whether a model will run acceptably on a given phone, and
- * putting it in a fixed 48 dp slot makes six models comparable at a glance in a way three
- * metadata strings per row do not.
- *
- * The download icon appears only on the selected row. On every row it would read as six
- * things to download rather than one choice to confirm — and the sticky CTA below is what
- * actually starts the download.
+ * One model, as a selectable 16dp rounded card with parameter badge.
  */
 @Composable
 private fun ModelCard(
@@ -213,7 +295,7 @@ private fun ModelCard(
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = RoundedCornerShape(16.dp),
         color = if (isSelected) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
@@ -227,7 +309,7 @@ private fun ModelCard(
         ) {
             Surface(
                 modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = CircleShape,
                 color = if (isSelected) {
                     MaterialTheme.colorScheme.primary
                 } else {
@@ -254,7 +336,7 @@ private fun ModelCard(
                 ) {
                     Text(
                         text = model.displayName,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.onPrimaryContainer
                         } else {
@@ -270,18 +352,15 @@ private fun ModelCard(
                     }
                 }
                 Text(
-                    // One line instead of three separate metadata strings: size, format,
-                    // and whether it can see. Everything that changes a decision, nothing
-                    // that does not.
                     text = buildString {
                         append("${model.downloadSizeMb} MB · ${model.quantizationFormat}")
                         if (model.capabilities.contains(LlmCapability.VISION)) {
-                            append(" · understands images")
+                            append(" · Vision")
                         }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     }
@@ -289,20 +368,27 @@ private fun ModelCard(
             }
 
             if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * Render a parameter count as the reference does: "1B", "1.5B", "2B" — a whole number when
- * the fraction is zero, one decimal place otherwise. `parameterCountB` is a `Float`, so the
- * naive `"$it"` prints "1.0B"; this is formatting only and does not change the model.
+ * Render a parameter count: "1B", "1.5B", "2B".
  */
 internal fun formatParams(count: Float): String =
     if (count == count.toLong().toFloat()) count.toLong().toString() else count.toString()

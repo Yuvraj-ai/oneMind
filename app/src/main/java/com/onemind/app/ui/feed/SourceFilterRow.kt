@@ -59,24 +59,26 @@ fun SourceFilterRow(
     }
 }
 
-/** `.filter-chip`: 12 dp and `surface-2` inactive, pill and `primary` active, no border. */
+/** Expressive M3 filter pill: 100dp pill shape with secondaryContainer active state. */
 @Composable
 private fun SourceChip(selected: Boolean, label: String, onClick: () -> Unit) {
-    val shape: Shape = if (selected) PillShape else RoundedCornerShape(12.dp)
-
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(label) },
-        shape = shape,
-        // Null rather than a transparent border: `FilterChip` draws an outline when
-        // unselected, and the reference's chips are a fill with no stroke at all.
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium
+            )
+        },
+        shape = PillShape,
+        // Null rather than a transparent border: clean pill fill with no outline.
         border = null,
         colors = FilterChipDefaults.filterChipColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
         )
     )
 }
